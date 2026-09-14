@@ -1,7 +1,6 @@
 package chat.ratatosk.desktop.model
 
-import chat.ratatosk.desktop.core.RatatoskCore
-import chat.ratatosk.desktop.util.Log
+import chat.ratatosk.desktop.backend.AppEvent
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -9,10 +8,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import org.ratatosk.core.FfiCompanionEvent
-import org.ratatosk.core.FfiEvent
 import org.ratatosk.core.FfiMailAccount
 import org.ratatosk.core.FfiMailStatus
 import org.ratatosk.core.FfiTorStatus
@@ -72,75 +68,54 @@ class TransportsModel(session: SessionContext) : FeatureModel(session), Transpor
     private var isAnnouncingTor = false
 
     override fun refreshTransportStatus() {
-        scope.launch(Dispatchers.IO) {
-            try {
-                val client = RatatoskCore.getClient()
-                val en = FfiTransport.entries.associateWith { client.transportEnabled(it) }
-                val re = FfiTransport.entries.associateWith { client.transportReady(it) }
-                val ts = client.torStatus()
-                val ms = client.mailStatus()
-                val ma = client.mailAccount()
+        session.clientIo { client ->
+            val en = FfiTransport.entries.associateWith { client.transportEnabled(it) }
+            val re = FfiTransport.entries.associateWith { client.transportReady(it) }
+            val ts = client.torStatus()
+            val ms = client.mailStatus()
+            val ma = client.mailAccount()
 
-                withContext(Dispatchers.Main) {
-                    _transportsEnabled.value = en
-                    _transportsReady.value = re
-                    _torStatus.value = ts
-                    _mailStatus.value = ms
-                    _mailAccount.value = ma
-                }
-            } catch (e: Exception) {
-                Log.w(TAG, "Failed to refresh transport status", e)
+            withContext(Dispatchers.Main) {
+                _transportsEnabled.value = en
+                _transportsReady.value = re
+                _torStatus.value = ts
+                _mailStatus.value = ms
+                _mailAccount.value = ma
             }
         }
     }
 
     override fun setTransportEnabled(transport: FfiTransport, enabled: Boolean) {
-        scope.launch(Dispatchers.IO) {
-            try {
-                RatatoskCore.getClient().setTransportEnabled(transport, enabled)
-                refreshTransportStatus()
-            } catch (e: Exception) {
-                session._error.value = "Failed to toggle transport: ${e.message}"
-            }
+        session.clientIo("Failed to toggle transport") { client ->
+            client.setTransportEnabled(transport, enabled)
+            refreshTransportStatus()
         }
     }
 
     override fun setMailAccount(address: String, password: String, imapHost: String, imapPort: Int, smtpHost: String, smtpPort: Int, viaTor: Boolean) {
-        scope.launch(Dispatchers.IO) {
-            try {
-                val client = RatatoskCore.getClient()
-                client.setMailAccount(address.trim(), password, imapHost.trim(), imapPort.toUShort(), smtpHost.trim(), smtpPort.toUShort(), viaTor)
-                client.networkChanged()
-                refreshTransportStatus()
-            } catch (e: Exception) {
-                session._error.value = "Failed to set mail account: ${e.message}"
-            }
+        session.clientIo("Failed to set mail account") { client ->
+            client.setMailAccount(address.trim(), password, imapHost.trim(), imapPort.toUShort(), smtpHost.trim(), smtpPort.toUShort(), viaTor)
+            client.networkChanged()
+            refreshTransportStatus()
         }
     }
 
     override fun createMailAccount(url: String, viaTor: Boolean) {
-        scope.launch(Dispatchers.IO) {
-            try {
-                val client = RatatoskCore.getClient()
-                if (viaTor && !client.transportEnabled(FfiTransport.ONION)) {
-                    session._error.value = "Tor must be enabled to register via Tor"
-                    return@launch
-                }
-                client.createMailAccount(url.trim(), viaTor)
-                client.networkChanged()
-                refreshTransportStatus()
-            } catch (e: Exception) {
-                session._error.value = "Failed to create mail account: ${e.message}"
+        session.clientIo("Failed to create mail account") { client ->
+            if (viaTor && !client.transportEnabled(FfiTransport.ONION)) {
+                session._error.value = "Tor must be enabled to register via Tor"
+                return@clientIo
             }
+            client.createMailAccount(url.trim(), viaTor)
+            client.networkChanged()
+            refreshTransportStatus()
         }
     }
 
     override fun clearMailAccount() {
-        scope.launch(Dispatchers.IO) {
-            try {
-                RatatoskCore.getClient().clearMailAccount()
-                refreshTransportStatus()
-            } catch (e: Exception) { }
+        session.clientIo { client ->
+            client.clearMailAccount()
+            refreshTransportStatus()
         }
     }
 
@@ -148,28 +123,27 @@ class TransportsModel(session: SessionContext) : FeatureModel(session), Transpor
         setTransportEnabled(FfiTransport.LAN, enabled)
     }
 
-    override fun onEvent(event: FfiEvent) {
+    override fun onEvent(event: AppEvent) {
         when (event) {
-            is FfiEvent.TorStatus -> {
+            is AppEvent.TorStatus -> {
                 _torStatus.value = FfiTorStatus(event.fraction, event.note, event.blocked)
                 if (event.fraction >= 1.0f && _onionAddress.value == null && !isAnnouncingTor) {
                     isAnnouncingTor = true
-                    scope.launch(Dispatchers.IO) {
+                    session.clientIo { client ->
                         try {
-                            val client = RatatoskCore.getClient()
                             val card = client.myAddresses()
                             withContext(Dispatchers.Main) {
                                 _onionAddress.value = card.onion.takeIf { it.isNotEmpty() }
                                 _cardVersion.value = card.version
                             }
                             if (client.transportEnabled(FfiTransport.ONION) && card.onion.isNotEmpty()) {
+                                // null — «почтовый адрес не трогать».
                                 client.announceAddresses(card.onion, null)
                                 val updatedCard = client.myAddresses()
                                 withContext(Dispatchers.Main) {
                                     _cardVersion.value = updatedCard.version
                                 }
                             }
-                        } catch (e: Exception) {
                         } finally {
                             isAnnouncingTor = false
                         }
@@ -177,37 +151,21 @@ class TransportsModel(session: SessionContext) : FeatureModel(session), Transpor
                 }
                 refreshTransportStatus()
             }
-            is FfiEvent.MailAccountReady -> {
-                val mailAddress = event.address
-                scope.launch(Dispatchers.IO) {
-                    try {
-                        val client = RatatoskCore.getClient()
-                        client.setTransportEnabled(FfiTransport.MAIL, true)
-                        refreshTransportStatus()
-                        client.announceAddresses(null, mailAddress)
-                    } catch (e: Exception) { }
+            is AppEvent.MailAccountReady -> {
+                session.clientIo { client ->
+                    client.setTransportEnabled(FfiTransport.MAIL, true)
+                    refreshTransportStatus()
+                    client.announceAddresses(null, event.address)
                 }
             }
-            is FfiEvent.MailAccountFailed -> {
+            is AppEvent.MailAccountFailed -> {
                 session._error.value = "Mail setup failed: ${event.reason}"
                 refreshTransportStatus()
             }
-            is FfiEvent.MailLoginFailed -> {
+            is AppEvent.MailLoginFailed -> {
                 session._error.value = "Mail login failed: ${event.reason}"
                 refreshTransportStatus()
             }
-            is FfiEvent.CommandRefused -> {
-                session._error.value = event.reason
-            }
-            else -> {}
-        }
-    }
-
-    override fun onCompanionEvent(event: FfiCompanionEvent) {
-        when (event) {
-            is FfiCompanionEvent.Linked -> session._isCompanionLinked.value = true
-            is FfiCompanionEvent.Unlinked -> session._isCompanionLinked.value = false
-            is FfiCompanionEvent.Refused -> session._error.value = event.reason
             else -> {}
         }
     }
@@ -222,9 +180,5 @@ class TransportsModel(session: SessionContext) : FeatureModel(session), Transpor
         _onionAddress.value = null
         _cardVersion.value = null
         isAnnouncingTor = false
-    }
-
-    private companion object {
-        const val TAG = "TransportsModel"
     }
 }

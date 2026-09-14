@@ -1,14 +1,19 @@
 package chat.ratatosk.desktop.model
 
+import chat.ratatosk.desktop.backend.AppEvent
+import chat.ratatosk.desktop.backend.Backend
+import chat.ratatosk.desktop.backend.ClientBackend
 import chat.ratatosk.desktop.core.RatatoskCore
 import chat.ratatosk.desktop.data.SettingsRepository
+import chat.ratatosk.desktop.util.Log
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.update
-import org.ratatosk.core.FfiCompanionEvent
-import org.ratatosk.core.FfiEvent
+import org.ratatosk.core.RatatoskClient
 
 /** Состояние сессии, которое видят экраны. */
 interface SessionApi {
@@ -18,7 +23,6 @@ interface SessionApi {
     val isCompanionMode: StateFlow<Boolean>
     val isCompanionLinked: StateFlow<Boolean>
     val isCompanionFresh: StateFlow<Boolean>
-    val events: StateFlow<List<FfiEvent>>
     fun clearError()
 }
 
@@ -51,37 +55,57 @@ class SessionContext(
     internal val _isCompanionFresh = MutableStateFlow(false)
     override val isCompanionFresh: StateFlow<Boolean> = _isCompanionFresh.asStateFlow()
 
-    private val _events = MutableStateFlow<List<FfiEvent>>(emptyList())
-    override val events: StateFlow<List<FfiEvent>> = _events.asStateFlow()
+    /** Открытый аккаунт; `null` — ничего не открыто. */
+    @Volatile
+    internal var backend: Backend? = null
+
+    /** Возможности полного клиента; у компаньона их нет. */
+    internal val client: RatatoskClient? get() = (backend as? ClientBackend)?.client
+
+    /**
+     * Команда в фоне. Нет открытого аккаунта — ничего не делает. Ошибка
+     * пишется в журнал и, если задан [errorPrefix], показывается человеку.
+     */
+    internal fun io(errorPrefix: String? = null, block: suspend CoroutineScope.(Backend) -> Unit): Job =
+        scope.launch(Dispatchers.IO) {
+            val b = backend ?: return@launch
+            try {
+                block(b)
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Log.w("Session", errorPrefix ?: "Backend call failed", e)
+                if (errorPrefix != null) _error.value = "$errorPrefix: ${e.message}"
+            }
+        }
+
+    /** То же для возможностей полного клиента; в режиме компаньона — ничего. */
+    internal fun clientIo(errorPrefix: String? = null, block: suspend CoroutineScope.(RatatoskClient) -> Unit): Job =
+        io(errorPrefix) { b -> (b as? ClientBackend)?.let { block(it.client) } }
 
     override fun clearError() {
         _error.value = null
     }
 
-    internal fun recordEvent(event: FfiEvent) {
-        _events.update { (it + event).takeLast(100) }
-    }
-
     /** Сессия закрыта: всё, что её описывало, — к исходному. */
     internal fun reset() {
+        backend = null
         _isInitialized.value = false
         _isCompanionMode.value = false
         _isCompanionLinked.value = false
         _isCompanionFresh.value = false
         _activeAccountId.value = null
-        _events.value = emptyList()
     }
 }
 
 /**
- * Модель одной функции приложения. События ядра до неё доносит [AppModels];
+ * Модель одной функции приложения. События аккаунта до неё доносит [AppModels];
  * [reset] зовётся при выходе из аккаунта и обязан вернуть модель к пустому
  * состоянию, отменив свою фоновую работу.
  */
 abstract class FeatureModel(protected val session: SessionContext) {
     protected val scope: CoroutineScope get() = session.scope
 
-    open fun onEvent(event: FfiEvent) {}
-    open fun onCompanionEvent(event: FfiCompanionEvent) {}
+    open fun onEvent(event: AppEvent) {}
     abstract fun reset()
 }

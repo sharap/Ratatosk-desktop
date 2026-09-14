@@ -1,8 +1,7 @@
 package chat.ratatosk.desktop.model
 
-import chat.ratatosk.desktop.core.RatatoskCore
+import chat.ratatosk.desktop.backend.AppEvent
 import chat.ratatosk.desktop.util.ClipboardUtils
-import chat.ratatosk.desktop.util.Log
 import chat.ratatosk.desktop.util.toHexString
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -16,10 +15,9 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import org.ratatosk.core.FfiCompanionEvent
 import org.ratatosk.core.FfiContact
-import org.ratatosk.core.FfiEvent
 import org.ratatosk.core.maxAvatarBytes
+import java.util.concurrent.ConcurrentHashMap
 
 interface ContactsApi {
     val contacts: StateFlow<List<FfiContact>>
@@ -45,14 +43,23 @@ interface ContactsApi {
     fun setAvatar(bytes: ByteArray?)
 }
 
-/** Контакты, своя карточка и лица. */
+/**
+ * Список чатов, своя карточка и лица.
+ *
+ * Экраны пока называют человека `peerIk` (типы полного клиента); у компаньона
+ * это тот же `chatId`. Модель переводит в `chatId` для [chat.ratatosk.desktop.backend.Backend].
+ */
 @OptIn(ExperimentalCoroutinesApi::class)
 class ContactsModel(session: SessionContext) : FeatureModel(session), ContactsApi {
     private val _contacts = MutableStateFlow<List<FfiContact>>(emptyList())
     override val contacts = _contacts.asStateFlow()
 
+    /** Лица по `peerIk` в hex — так их ищут экраны. */
     private val _contactAvatars = MutableStateFlow<Map<String, ByteArray>>(emptyMap())
     override val contactAvatars = _contactAvatars.asStateFlow()
+
+    /** Чьи лица уже запрошены: без этого экран спрашивал бы ядро на каждой перерисовке. */
+    private val avatarRequests = ConcurrentHashMap.newKeySet<String>()
 
     private val _fingerprint = MutableStateFlow<String?>(null)
     override val fingerprint = _fingerprint.asStateFlow()
@@ -70,93 +77,50 @@ class ContactsModel(session: SessionContext) : FeatureModel(session), ContactsAp
     private val _myContactUri = MutableStateFlow<String?>(null)
     override val myContactUri = _myContactUri.asStateFlow()
 
-    /** Отпечаток и предел аватара; бросает, если личность не читается. */
-    internal suspend fun loadIdentity() {
-        val client = RatatoskCore.getClient()
-        val fingerprint = client.fingerprint()
-        val maxAvatar = try { maxAvatarBytes().toInt() } catch (e: Exception) { 32768 }
-        withContext(Dispatchers.Main) {
-            _fingerprint.value = fingerprint
-            _maxAvatarBytes.value = maxAvatar
+    /** Первое, что нужно открытому аккаунту: список, своё лицо, отпечаток. */
+    internal fun onSessionStarted() {
+        session.io("Failed to load identity") { backend ->
+            val maxAvatar = try { maxAvatarBytes().toInt() } catch (e: Exception) { 32768 }
+            val fingerprint = session.client?.fingerprint()
+            withContext(Dispatchers.Main) {
+                _maxAvatarBytes.value = maxAvatar
+                _fingerprint.value = fingerprint
+            }
+            backend.requestChats()
+            backend.requestAvatar(null)
         }
-    }
-
-    internal suspend fun loadMyAvatar() {
-        try {
-            val avatar = RatatoskCore.getClient().myAvatar()
-            withContext(Dispatchers.Main) { _myAvatar.value = avatar }
-        } catch (e: Exception) { }
-    }
-
-    internal suspend fun loadContacts(): List<FfiContact> {
-        val currentContacts = RatatoskCore.getClient().contacts()
-        withContext(Dispatchers.Main) { _contacts.value = currentContacts }
-        return currentContacts
     }
 
     override fun refreshContacts() {
-        scope.launch(Dispatchers.IO) {
-            try {
-                val list = RatatoskCore.getClient().contacts()
-                _contacts.value = list
-            } catch (e: Exception) {
-                scope.launch {
-                    session._error.value = "Failed to refresh contacts: ${e.message}"
-                }
-            }
-        }
+        session.io("Failed to refresh contacts") { it.requestChats() }
     }
 
     override fun addContact(uri: String, metInPerson: Boolean) {
-        scope.launch(Dispatchers.IO) {
-            try {
-                RatatoskCore.getClient().addContact(uri, metInPerson)
-            } catch (e: Exception) {
-                session._error.value = "Failed to add contact: ${e.message}"
-            }
-        }
+        session.clientIo("Failed to add contact") { it.addContact(uri, metInPerson) }
     }
 
     override fun addSharedContact(msgId: ByteArray) {
-        scope.launch(Dispatchers.IO) {
-            try {
-                RatatoskCore.getClient().addSharedContact(msgId)
-            } catch (e: Exception) {
-                session._error.value = "Failed to add shared contact: ${e.message}"
-            }
-        }
+        session.io("Failed to add shared contact") { it.addSharedContact(msgId) }
     }
 
     override fun shareContact(chatId: ByteArray, peerIk: ByteArray) {
-        scope.launch(Dispatchers.IO) {
-            try {
-                RatatoskCore.getClient().shareContact(chatId, peerIk)
-            } catch (e: Exception) {
-                session._error.value = "Failed to share contact: ${e.message}"
-            }
+        val whoChatId = chatIdOf(peerIk)
+        session.io("Failed to share contact") { backend ->
+            backend.shareContact(chatId, whoChatId ?: throw IllegalArgumentException("Unknown contact"))
         }
     }
 
     override fun getMyContactUri() {
-        scope.launch(Dispatchers.IO) {
-            try {
-                val uri = RatatoskCore.getClient().myContactUri()
-                withContext(Dispatchers.Main) {
-                    _myContactUri.value = uri
-                }
-            } catch (e: Exception) { }
+        session.clientIo { client ->
+            val uri = client.myContactUri()
+            withContext(Dispatchers.Main) { _myContactUri.value = uri }
         }
     }
 
     /** Копирует свою ссылку в буфер: только по явной просьбе человека. */
     override fun copyMyContactUri(onDone: (Boolean) -> Unit) {
         scope.launch(Dispatchers.IO) {
-            val uri = try {
-                RatatoskCore.getClient().myContactUri()
-            } catch (e: Exception) {
-                Log.w(TAG, "Failed to get contact uri", e)
-                null
-            }
+            val uri = runCatching { session.client?.myContactUri() }.getOrNull()
             withContext(Dispatchers.Main) {
                 if (uri != null) {
                     _myContactUri.value = uri
@@ -175,20 +139,16 @@ class ContactsModel(session: SessionContext) : FeatureModel(session), ContactsAp
     }
 
     override fun setLocalName(peerIk: ByteArray, name: String?) {
-        scope.launch(Dispatchers.IO) {
-            try {
-                RatatoskCore.getClient().setLocalName(peerIk, name)
-                refreshContacts()
-            } catch (e: Exception) { }
+        session.clientIo { client ->
+            client.setLocalName(peerIk, name)
+            session.backend?.requestChats()
         }
     }
 
     override fun deleteContact(peerIk: ByteArray, purgeHistory: Boolean) {
-        scope.launch(Dispatchers.IO) {
-            try {
-                RatatoskCore.getClient().deleteContact(peerIk, purgeHistory)
-                refreshContacts()
-            } catch (e: Exception) { }
+        session.clientIo { client ->
+            client.deleteContact(peerIk, purgeHistory)
+            session.backend?.requestChats()
         }
     }
 
@@ -197,87 +157,60 @@ class ContactsModel(session: SessionContext) : FeatureModel(session), ContactsAp
     }
 
     override fun markVerified(peerIk: ByteArray) {
-        scope.launch(Dispatchers.IO) {
-            try {
-                RatatoskCore.getClient().markVerified(peerIk)
-                refreshContacts()
-            } catch (e: Exception) {
-                session._error.value = "Failed to mark as verified: ${e.message}"
-            }
+        session.clientIo("Failed to mark as verified") { client ->
+            client.markVerified(peerIk)
+            session.backend?.requestChats()
         }
     }
 
     override fun revokeVerification(peerIk: ByteArray) {
-        scope.launch(Dispatchers.IO) {
-            try {
-                RatatoskCore.getClient().revokeVerification(peerIk)
-                refreshContacts()
-            } catch (e: Exception) {
-                session._error.value = "Failed to revoke verification: ${e.message}"
-            }
+        session.clientIo("Failed to revoke verification") { client ->
+            client.revokeVerification(peerIk)
+            session.backend?.requestChats()
         }
     }
 
     override fun getAvatarOf(peerIk: ByteArray): ByteArray? {
         val hex = peerIk.toHexString()
         _contactAvatars.value[hex]?.let { return it }
-        scope.launch(Dispatchers.IO) {
-            try {
-                val bytes = RatatoskCore.getClient().avatarOf(peerIk)
-                if (bytes != null) {
-                    _contactAvatars.update { it + (hex to bytes) }
-                }
-            } catch (e: Exception) { }
+        val chatId = chatIdOf(peerIk) ?: return null
+        if (avatarRequests.add(hex)) {
+            session.io { it.requestAvatar(chatId) }
         }
         return null
     }
 
     override fun setAvatar(bytes: ByteArray?) {
-        scope.launch(Dispatchers.IO) {
-            try {
-                RatatoskCore.getClient().setAvatar(bytes)
-                _myAvatar.value = bytes
-            } catch (e: Exception) {
-                Log.w(TAG, "Failed to set avatar", e)
-            }
-        }
+        session.io("Failed to set avatar") { it.setMyAvatar(bytes) }
     }
 
-    override fun onEvent(event: FfiEvent) {
-        when (event) {
-            is FfiEvent.MessageReceived -> refreshContacts()
-            is FfiEvent.ContactAdded, is FfiEvent.ContactChanged, is FfiEvent.ContactRemoved -> {
-                refreshContacts()
-            }
-            is FfiEvent.AvatarChanged -> {
-                val ikHex = event.peerIk.toHexString()
-                scope.launch(Dispatchers.IO) {
-                    try {
-                        val bytes = RatatoskCore.getClient().avatarOf(event.peerIk)
-                        if (bytes != null) {
-                            _contactAvatars.update { it + (ikHex to bytes) }
-                        } else {
-                            _contactAvatars.update { it - ikHex }
-                        }
-                        refreshContacts()
-                    } catch (e: Exception) { }
-                }
-            }
-            is FfiEvent.GroupMembershipChanged -> refreshContacts()
-            else -> {}
-        }
-    }
+    private fun chatIdOf(peerIk: ByteArray): ByteArray? =
+        _contacts.value.find { it.peerIk.contentEquals(peerIk) }?.chatId
 
-    override fun onCompanionEvent(event: FfiCompanionEvent) {
+    private fun peerIkHexOf(chatId: ByteArray): String? =
+        _contacts.value.find { it.chatId.contentEquals(chatId) }?.peerIk?.toHexString()
+
+    override fun onEvent(event: AppEvent) {
         when (event) {
-            is FfiCompanionEvent.Chats -> {
-                _contacts.value = event.chats.map { mapCompanionChat(it) }
-                session._isCompanionFresh.value = event.fresh
+            is AppEvent.ChatsLoaded -> {
+                _contacts.value = event.chats
+                if (session.backend?.isCompanion == true) session._isCompanionFresh.value = event.fresh
             }
-            is FfiCompanionEvent.Linked, is FfiCompanionEvent.ChatsChanged -> {
-                scope.launch(Dispatchers.IO) {
-                    try { RatatoskCore.getCompanion().chats() } catch (e: Exception) {}
+            is AppEvent.ChatsChanged, is AppEvent.MessageArrived -> refreshContacts()
+            is AppEvent.AvatarLoaded -> {
+                val chatId = event.chatId
+                if (chatId == null) {
+                    _myAvatar.value = event.bytes
+                } else {
+                    val hex = peerIkHexOf(chatId) ?: return
+                    val bytes = event.bytes
+                    _contactAvatars.update { if (bytes != null) it + (hex to bytes) else it - hex }
                 }
+            }
+            is AppEvent.AvatarChanged -> {
+                val chatId = event.chatId
+                if (chatId != null) peerIkHexOf(chatId)?.let { avatarRequests.remove(it) }
+                session.io { it.requestAvatar(chatId) }
             }
             else -> {}
         }
@@ -288,10 +221,7 @@ class ContactsModel(session: SessionContext) : FeatureModel(session), ContactsAp
         _fingerprint.value = null
         _myAvatar.value = null
         _contactAvatars.value = emptyMap()
+        avatarRequests.clear()
         _myContactUri.value = null
-    }
-
-    private companion object {
-        const val TAG = "ContactsModel"
     }
 }

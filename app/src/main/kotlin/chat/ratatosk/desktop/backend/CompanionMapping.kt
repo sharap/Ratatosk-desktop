@@ -1,4 +1,4 @@
-package chat.ratatosk.desktop.model
+package chat.ratatosk.desktop.backend
 
 import chat.ratatosk.desktop.util.ImageUtils
 import org.ratatosk.core.FfiAnomalies
@@ -38,7 +38,7 @@ internal fun mapCompanionChat(chat: FfiCompanionChat): FfiContact {
     )
 }
 
-internal fun mapCompanionMessage(msg: FfiCompanionMessage, fingerprint: String?): FfiMessage {
+internal fun mapCompanionMessage(msg: FfiCompanionMessage): FfiMessage {
     return FfiMessage(
         msgId = msg.msgId,
         body = msg.body,
@@ -47,7 +47,8 @@ internal fun mapCompanionMessage(msg: FfiCompanionMessage, fingerprint: String?)
         status = msg.status,
         editedAtMs = msg.editedAtMs,
         forwarded = msg.forwarded,
-        reactions = msg.reactions.map { FfiReaction(it.emoji, if (it.mine) fingerprint?.hexToByteArray() ?: ByteArray(0) else ByteArray(0), it.mine) },
+        // Ключа автора реакции у компаньона нет (§13.4) — только признак «моя».
+        reactions = msg.reactions.map { FfiReaction(it.emoji, ByteArray(0), it.mine) },
         files = msg.files.map { mapCompanionAttachment(it, msg.mine) },
         replyTo = msg.replyTo,
         sharedContact = null,
@@ -78,5 +79,3 @@ internal fun previewFor(file: File): ByteArray? {
     val limit = try { maxPreviewBytes().toInt() } catch (e: Exception) { return null }
     return ImageUtils.makePreview(file, limit)
 }
-
-private fun String.hexToByteArray() = chunked(2).map { it.toInt(16).toByte() }.toByteArray()

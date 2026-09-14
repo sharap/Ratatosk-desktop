@@ -1,0 +1,160 @@
+package chat.ratatosk.desktop.backend
+
+import chat.ratatosk.desktop.core.RatatoskCore
+import chat.ratatosk.desktop.util.Log
+import chat.ratatosk.desktop.util.toHexString
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.channels.BufferOverflow
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.asSharedFlow
+import kotlinx.coroutines.flow.launchIn
+import kotlinx.coroutines.flow.onEach
+import kotlinx.coroutines.withContext
+import org.ratatosk.core.FfiCompanionEvent
+import org.ratatosk.core.FfiCompanionOutgoing
+import org.ratatosk.core.FfiFile
+import org.ratatosk.core.RatatoskCompanion
+import java.io.File
+import java.util.concurrent.ConcurrentHashMap
+
+/**
+ * Второй экран телефона (§13.4): своей базы и ключей нет, каждая команда
+ * уходит телефону, каждый ответ приходит событием.
+ */
+class CompanionBackend(val companion: RatatoskCompanion) : Backend {
+    private val _events = MutableSharedFlow<AppEvent>(
+        extraBufferCapacity = 512,
+        onBufferOverflow = BufferOverflow.DROP_OLDEST,
+    )
+    override val events: SharedFlow<AppEvent> = _events.asSharedFlow()
+    override val isCompanion = true
+
+    private var job: Job? = null
+
+    /** Сохранения, ждущие `FileSaved` от ядра. */
+    private val pendingSaves = ConcurrentHashMap<String, CompletableDeferred<Unit>>()
+
+    private fun emit(event: AppEvent) {
+        if (!_events.tryEmit(event)) Log.w(TAG, "Event buffer full")
+    }
+
+    override fun start(scope: CoroutineScope) {
+        job = RatatoskCore.companionEvents.onEach { translate(it) }.launchIn(scope)
+    }
+
+    override fun close() {
+        job?.cancel()
+        job = null
+        pendingSaves.values.forEach { it.cancel() }
+        pendingSaves.clear()
+    }
+
+    private fun translate(event: FfiCompanionEvent) {
+        when (event) {
+            is FfiCompanionEvent.Linked -> {
+                emit(AppEvent.Linked)
+                emit(AppEvent.ChatsChanged)
+            }
+            is FfiCompanionEvent.Unlinked, is FfiCompanionEvent.Revoked -> emit(AppEvent.Unlinked)
+            is FfiCompanionEvent.Refused -> emit(AppEvent.Refused(event.reason))
+
+            is FfiCompanionEvent.Chats -> emit(AppEvent.ChatsLoaded(event.chats.map { mapCompanionChat(it) }, event.fresh))
+            is FfiCompanionEvent.ChatsChanged -> emit(AppEvent.ChatsChanged)
+            is FfiCompanionEvent.Avatar -> emit(AppEvent.AvatarLoaded(event.chatId, event.bytes))
+            is FfiCompanionEvent.AvatarChanged -> emit(AppEvent.AvatarChanged(event.chatId))
+
+            is FfiCompanionEvent.History ->
+                emit(AppEvent.HistoryLoaded(event.chatId, event.page.map { mapCompanionMessage(it) }, event.fresh))
+            is FfiCompanionEvent.Arrived -> emit(AppEvent.MessageArrived(event.message.chatId, event.message.msgId))
+            is FfiCompanionEvent.StatusChanged -> emit(AppEvent.StatusChanged(event.msgId, event.status))
+            is FfiCompanionEvent.Gone -> emit(AppEvent.MessagesChanged(event.chatId))
+            is FfiCompanionEvent.Edited -> emit(AppEvent.MessagesChanged(event.message.chatId))
+            is FfiCompanionEvent.Reacted -> emit(AppEvent.MessagesChanged(event.chatId))
+
+            is FfiCompanionEvent.FileProgress -> {
+                val fraction = if (event.chunkTotal > 0UL) event.haveChunks.toFloat() / event.chunkTotal.toFloat() else 0f
+                emit(AppEvent.FileProgress(event.fileId, fraction))
+            }
+            is FfiCompanionEvent.FilePreview -> emit(AppEvent.PreviewLoaded(event.fileId, event.bytes))
+            is FfiCompanionEvent.FileSaved -> {
+                emit(AppEvent.FileProgress(event.fileId, 1f))
+                pendingSaves.remove(event.fileId.toHexString())?.complete(Unit)
+            }
+            is FfiCompanionEvent.FileGone -> {
+                pendingSaves.remove(event.fileId.toHexString())
+                    ?.completeExceptionally(IllegalStateException("File is no longer available"))
+            }
+            is FfiCompanionEvent.FilesSent -> {
+                event.fileIds.forEach { emit(AppEvent.FileProgress(it, 1f)) }
+                emit(AppEvent.ChatsChanged)
+            }
+            else -> {}
+        }
+    }
+
+    // --- Чаты и лица ------------------------------------------------------
+
+    override fun requestChats() = companion.chats()
+    override fun requestAvatar(chatId: ByteArray?) = companion.avatar(chatId)
+    override fun setMyAvatar(bytes: ByteArray?) = companion.setAvatar(bytes)
+    override fun addSharedContact(msgId: ByteArray) = companion.addSharedContact(msgId)
+    override fun shareContact(chatId: ByteArray, whoChatId: ByteArray?) = companion.shareContact(chatId, whoChatId)
+
+    // --- Переписка --------------------------------------------------------
+
+    override fun requestHistory(chatId: ByteArray, limit: UInt) = companion.history(chatId, limit, null)
+    override fun chatOpened(chatId: ByteArray) {}
+    override fun sendText(chatId: ByteArray, text: String) = companion.sendText(chatId, text)
+
+    override fun sendFiles(chatId: ByteArray, files: List<File>, text: String) =
+        companion.sendFiles(chatId, files.map { FfiCompanionOutgoing(it.absolutePath, previewFor(it)) }, text)
+
+    override fun reply(chatId: ByteArray, replyTo: ByteArray, text: String) = companion.sendReply(chatId, replyTo, text)
+    override fun editMessage(chatId: ByteArray, msgId: ByteArray, text: String) = companion.editMessage(chatId, msgId, text)
+    override fun deleteMessages(chatId: ByteArray, msgIds: List<ByteArray>) = companion.deleteMessages(chatId, msgIds)
+    override fun retractMessages(chatId: ByteArray, msgIds: List<ByteArray>) = companion.retractMessages(chatId, msgIds)
+    override fun forwardMessages(chatId: ByteArray, msgIds: List<ByteArray>) = companion.forwardMessages(chatId, msgIds)
+    // Пустая строка у телефона — «снять реакцию».
+    override fun setReaction(chatId: ByteArray, msgId: ByteArray, emoji: String?) = companion.setReaction(chatId, msgId, emoji ?: "")
+    override fun markRead(chatId: ByteArray, upTo: ByteArray) = companion.markRead(chatId, upTo)
+    override fun clearChat(chatId: ByteArray) = companion.clearChat(chatId)
+
+    // --- Вложения ---------------------------------------------------------
+
+    override fun acceptFile(chatId: ByteArray, fileId: ByteArray) = companion.acceptFile(fileId)
+    override fun declineFile(chatId: ByteArray, fileId: ByteArray) = companion.declineFile(fileId)
+    override fun requestPreview(fileId: ByteArray) = companion.preview(fileId)
+
+    /**
+     * Ядро пишет файл само (с `.part` до конца приёма) и сообщает `FileSaved`.
+     * Сохранение у компаньона одно на всё окно: отмена — `cancelSave()`.
+     */
+    override suspend fun saveFile(file: FfiFile, destination: File) {
+        val key = file.fileId.toHexString()
+        val done = CompletableDeferred<Unit>()
+        pendingSaves.put(key, done)?.cancel()
+        try {
+            withContext(Dispatchers.IO) {
+                destination.parentFile?.mkdirs()
+                companion.saveFile(file.fileId, file.chunkTotal, destination.absolutePath)
+            }
+            done.await()
+        } catch (e: CancellationException) {
+            withContext(kotlinx.coroutines.NonCancellable + Dispatchers.IO) {
+                runCatching { companion.cancelSave() }
+            }
+            throw e
+        } finally {
+            pendingSaves.remove(key, done)
+        }
+    }
+
+    private companion object {
+        const val TAG = "CompanionBackend"
+    }
+}

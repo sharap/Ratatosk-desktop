@@ -1,118 +1,91 @@
 package chat.ratatosk.desktop.model
 
+import chat.ratatosk.desktop.backend.AppEvent
+import chat.ratatosk.desktop.backend.Backend
+import chat.ratatosk.desktop.backend.ClientBackend
+import chat.ratatosk.desktop.backend.CompanionBackend
 import chat.ratatosk.desktop.core.RatatoskCore
 import chat.ratatosk.desktop.data.SettingsRepository
 import chat.ratatosk.desktop.util.AppDirs
+import chat.ratatosk.desktop.util.Log
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.launchIn
-import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 
 /**
- * Все модели приложения и то, что их связывает: запуск сессии после
- * открытия аккаунта, доставка событий ядра каждой модели и выход.
+ * Все модели приложения и то, что их связывает: открытие сессии поверх
+ * [Backend], доставка его событий каждой модели и выход.
  */
 class AppModels(settings: SettingsRepository, scope: CoroutineScope) : SessionLifecycle {
     val session = SessionContext(scope, settings)
     val preferences = PreferencesModel(session)
     val contacts = ContactsModel(session)
-    val chats = ChatsModel(session, contacts)
-    val files = FilesModel(session, chats)
+    val chats = ChatsModel(session)
+    val files = FilesModel(session)
     val transports = TransportsModel(session)
     val accounts = AccountsModel(session, lifecycle = this)
 
     private val features: List<FeatureModel> = listOf(preferences, contacts, chats, files, transports, accounts)
 
     private var eventsJob: Job? = null
-    private var companionEventsJob: Job? = null
 
     init {
         // Копии вложений от прошлого запуска, если он завершился не выходом.
         scope.launch(Dispatchers.IO) { AppDirs.clearMediaCache() }
 
-        scope.launch {
-            while (true) {
-                if (!session.isInitialized.value && RatatoskCore.isInitialized()) {
-                    session._isInitialized.value = true
-                    session._activeAccountId.value = RatatoskCore.getActiveAccountId()
-                    startClientSession()
-                }
-                delay(1000)
-            }
-        }
-
         if (RatatoskCore.isInitialized()) {
             if (RatatoskCore.isCompanionMode()) startCompanionSession() else startClientSession()
         }
 
+        // Страховка на случай пропущенного события: список и транспорты
+        // перечитываются раз в полминуты.
         scope.launch {
             while (true) {
-                if (RatatoskCore.isInitialized()) {
-                    if (RatatoskCore.isCompanionMode()) {
-                        try {
-                            RatatoskCore.getCompanion().chats()
-                        } catch (e: Exception) {}
-                    } else {
-                        contacts.refreshContacts()
-                        transports.refreshTransportStatus()
-                    }
+                delay(30_000)
+                session.backend?.let {
+                    contacts.refreshContacts()
+                    transports.refreshTransportStatus()
                 }
-                delay(30000)
             }
         }
     }
 
-    override fun startClientSession() {
-        val scope = session.scope
-        scope.launch(Dispatchers.IO) {
+    override fun startClientSession() = open(ClientBackend(RatatoskCore.getClient()))
+
+    override fun startCompanionSession() = open(CompanionBackend(RatatoskCore.getCompanion()))
+
+    private fun open(backend: Backend) {
+        session.backend?.close()
+        eventsJob?.cancel()
+
+        session.backend = backend
+        // Подписка — до start(): ответы на первые запросы иначе ушли бы в пустоту.
+        eventsJob = session.scope.launch(Dispatchers.Main, start = CoroutineStart.UNDISPATCHED) {
+            backend.events.collect { event -> dispatch(event) }
+        }
+        backend.start(session.scope)
+
+        contacts.onSessionStarted()
+        files.onSessionStarted()
+        transports.refreshTransportStatus()
+    }
+
+    private fun dispatch(event: AppEvent) {
+        when (event) {
+            is AppEvent.Linked -> session._isCompanionLinked.value = true
+            is AppEvent.Unlinked -> session._isCompanionLinked.value = false
+            is AppEvent.Refused -> session._error.value = event.reason
+            else -> {}
+        }
+        features.forEach { model ->
             try {
-                contacts.loadIdentity()
-
-                withContext(Dispatchers.Main) {
-                    if (eventsJob == null) {
-                        eventsJob = RatatoskCore.events
-                            .onEach { event ->
-                                session.recordEvent(event)
-                                features.forEach { it.onEvent(event) }
-                            }
-                            .launchIn(scope)
-                    }
-                }
-
-                launch(Dispatchers.IO) { contacts.loadMyAvatar() }
-                launch(Dispatchers.IO) { files.loadAutoAcceptLimit() }
-                launch(Dispatchers.IO) {
-                    try {
-                        val currentContacts = contacts.loadContacts()
-                        transports.refreshTransportStatus()
-                        currentContacts.forEach { chats.loadMessages(it.chatId) }
-                    } catch (e: Exception) { }
-                }
+                model.onEvent(event)
             } catch (e: Exception) {
-                withContext(Dispatchers.Main) {
-                    session._error.value = "Failed to load identity: ${e.message}"
-                }
+                Log.e("AppModels", "Model failed on ${event::class.simpleName}", e)
             }
-        }
-    }
-
-    override fun startCompanionSession() {
-        val scope = session.scope
-        scope.launch(Dispatchers.IO) {
-            withContext(Dispatchers.Main) {
-                if (companionEventsJob == null) {
-                    companionEventsJob = RatatoskCore.companionEvents
-                        .onEach { event -> features.forEach { it.onCompanionEvent(event) } }
-                        .launchIn(scope)
-                }
-            }
-            try {
-                RatatoskCore.getCompanion().chats()
-            } catch (e: Exception) {}
         }
     }
 
@@ -121,8 +94,7 @@ class AppModels(settings: SettingsRepository, scope: CoroutineScope) : SessionLi
         // закрытием и очисткой, снова наполнит состояние прошлого аккаунта.
         eventsJob?.cancel()
         eventsJob = null
-        companionEventsJob?.cancel()
-        companionEventsJob = null
+        session.backend?.close()
 
         features.forEach { it.reset() }
         RatatoskCore.logout()

@@ -156,6 +156,13 @@ Android-эталон — полный узел.
 
 ## Этап 3. Слой ядра и ViewModel — выровнять с Android
 
+**Сделано 14.09:**
+* 3.1 (`06b6d08`) — ViewModel разрезан на модели пакета `model`; `RatatoskViewModel` — временный фасад.
+* 3.2 — пакет `backend`: `Backend` с `ClientBackend` и `CompanionBackend`, единые `AppEvent`, человек
+  называется `chatId`. Модели не знают ни `FfiEvent`, ни `FfiCompanionEvent` и не ветвятся по режиму;
+  возможности полного клиента — через `session.client`. Починено: в режиме компаньона отправка,
+  ответы, реакции, правка, удаление и сохранение файлов шли в несуществующий клиент и падали.
+
 Рекомендуемый подход: **не копировать 2771 строку одним файлом**, а сразу разрезать VM
 по фичам (`ChatsViewModel`/`MessagesDelegate`, `GroupsDelegate`, `TransportsDelegate`,
 `FilesDelegate`, `CompanionDelegate`, `AccountsDelegate`) с общим `EngineState`. Android

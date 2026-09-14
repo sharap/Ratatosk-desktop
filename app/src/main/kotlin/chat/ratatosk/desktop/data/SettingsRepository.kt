@@ -10,10 +10,10 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 import java.io.File
 
-class SettingsRepository {
-    private val dataStore = PreferenceDataStoreFactory.create {
-        File(AppDirs.getBaseDir(), "settings.preferences_pb")
-    }
+class SettingsRepository(
+    file: File = File(AppDirs.getBaseDir(), "settings.preferences_pb"),
+) {
+    private val dataStore = PreferenceDataStoreFactory.create { file }
 
     private object Keys {
         val THEME_COLOR = longPreferencesKey("theme_color")
