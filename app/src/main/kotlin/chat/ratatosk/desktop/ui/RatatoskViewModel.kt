@@ -6,6 +6,7 @@ import chat.ratatosk.desktop.model.AppModels
 import chat.ratatosk.desktop.model.ChatsApi
 import chat.ratatosk.desktop.model.ContactsApi
 import chat.ratatosk.desktop.model.FilesApi
+import chat.ratatosk.desktop.model.GroupsApi
 import chat.ratatosk.desktop.model.PreferencesApi
 import chat.ratatosk.desktop.model.SessionApi
 import chat.ratatosk.desktop.model.TransportsApi
@@ -27,6 +28,7 @@ class RatatoskViewModel private constructor(
     ContactsApi by models.contacts,
     ChatsApi by models.chats,
     FilesApi by models.files,
+    GroupsApi by models.groups,
     TransportsApi by models.transports,
     PreferencesApi by models.preferences {
 

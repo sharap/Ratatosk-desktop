@@ -29,9 +29,12 @@ interface ChatsApi {
     val activeChatId: SharedFlow<ByteArray?>
     val activeChatIdFlow: StateFlow<ByteArray?>
     val activeContactIdFlow: StateFlow<ByteArray?>
+    /** Группа, чьи сведения открыты. */
+    val activeGroupIdFlow: StateFlow<ByteArray?>
     fun loadMessages(chatId: ByteArray, limit: Int? = null)
     fun setActiveChat(chatId: ByteArray?)
     fun setActiveContact(chatId: ByteArray?)
+    fun setActiveGroup(chatId: ByteArray?)
     fun searchMessages(chatId: ByteArray?, query: String)
     fun clearSearch()
     fun sendText(chatId: ByteArray, text: String)
@@ -82,6 +85,9 @@ class ChatsModel(session: SessionContext) : FeatureModel(session), ChatsApi {
     private val _activeContactIdFlow = MutableStateFlow<ByteArray?>(null)
     override val activeContactIdFlow = _activeContactIdFlow.asStateFlow()
 
+    private val _activeGroupIdFlow = MutableStateFlow<ByteArray?>(null)
+    override val activeGroupIdFlow = _activeGroupIdFlow.asStateFlow()
+
     /**
      * Сколько последних сообщений показано в чате. Перечитывание по событию
      * берёт столько же: список не сжимается, пока человек листает историю,
@@ -103,6 +109,7 @@ class ChatsModel(session: SessionContext) : FeatureModel(session), ChatsApi {
         _activeChatIdFlow.value = chatId
         if (chatId != null) {
             _activeContactIdFlow.value = null
+            _activeGroupIdFlow.value = null
             _unreadCounts.update { it + (chatId.toHexString() to 0) }
             loadMessages(chatId)
             session.io { it.chatOpened(chatId) }
@@ -114,6 +121,16 @@ class ChatsModel(session: SessionContext) : FeatureModel(session), ChatsApi {
         if (chatId != null) {
             _activeChatId.value = null
             _activeChatIdFlow.value = null
+            _activeGroupIdFlow.value = null
+        }
+    }
+
+    override fun setActiveGroup(chatId: ByteArray?) {
+        _activeGroupIdFlow.value = chatId
+        if (chatId != null) {
+            _activeChatId.value = null
+            _activeChatIdFlow.value = null
+            _activeContactIdFlow.value = null
         }
     }
 
@@ -214,8 +231,8 @@ class ChatsModel(session: SessionContext) : FeatureModel(session), ChatsApi {
             is AppEvent.ChatsLoaded -> {
                 // Историю — только тем, чья ещё не загружена: список приходит
                 // на каждое входящее, а перечитывать все чаты незачем.
-                event.chats.forEach { chat ->
-                    if (!loadedLimits.containsKey(chat.chatId.toHexString())) loadMessages(chat.chatId)
+                (event.chats.map { it.chatId } + event.groups.map { it.chatId }).forEach { chatId ->
+                    if (!loadedLimits.containsKey(chatId.toHexString())) loadMessages(chatId)
                 }
             }
             is AppEvent.HistoryLoaded -> {
@@ -243,6 +260,7 @@ class ChatsModel(session: SessionContext) : FeatureModel(session), ChatsApi {
         _activeChatId.value = null
         _activeChatIdFlow.value = null
         _activeContactIdFlow.value = null
+        _activeGroupIdFlow.value = null
         _messages.value = emptyMap()
         _messageStatuses.value = emptyMap()
         _repliedMessages.value = emptyMap()

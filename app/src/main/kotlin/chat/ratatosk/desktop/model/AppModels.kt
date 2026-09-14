@@ -26,9 +26,10 @@ class AppModels(settings: SettingsRepository, scope: CoroutineScope) : SessionLi
     val chats = ChatsModel(session)
     val files = FilesModel(session)
     val transports = TransportsModel(session)
+    val groups = GroupsModel(session)
     val accounts = AccountsModel(session, lifecycle = this)
 
-    private val features: List<FeatureModel> = listOf(preferences, contacts, chats, files, transports, accounts)
+    private val features: List<FeatureModel> = listOf(preferences, contacts, chats, files, transports, groups, accounts)
 
     private var eventsJob: Job? = null
 

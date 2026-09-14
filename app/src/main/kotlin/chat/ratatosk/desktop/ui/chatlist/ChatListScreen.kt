@@ -8,6 +8,8 @@ import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Groups
+import androidx.compose.material.icons.filled.PersonAdd
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
@@ -16,6 +18,7 @@ import chat.ratatosk.desktop.ui.RatatoskViewModel
 import chat.ratatosk.desktop.ui.Strings
 import chat.ratatosk.desktop.ui.components.AddContactDialog
 import chat.ratatosk.desktop.ui.components.Avatar
+import chat.ratatosk.desktop.ui.components.CreateGroupDialog
 import chat.ratatosk.desktop.util.toHexString
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -28,7 +31,17 @@ fun ChatListScreen(
     showFab: Boolean = true
 ) {
     var showAddDialog by remember { mutableStateOf(false) }
+    var showCreateGroup by remember { mutableStateOf(false) }
+    var showFabMenu by remember { mutableStateOf(false) }
+    val isCompanionMode by viewModel.isCompanionMode.collectAsState()
     val contacts by viewModel.contacts.collectAsState()
+    val groups by viewModel.groups.collectAsState()
+    val groupAvatars by viewModel.groupAvatars.collectAsState()
+
+    // Только что заведённую группу — сразу открыть.
+    LaunchedEffect(Unit) {
+        viewModel.createdGroups.collect { onChatClick(it) }
+    }
     val unreadCounts by viewModel.unreadCounts.collectAsState()
     val allMessages by viewModel.messages.collectAsState()
     val contactAvatars by viewModel.contactAvatars.collectAsState()
@@ -75,14 +88,31 @@ fun ChatListScreen(
         },
         floatingActionButton = {
             if (showFab) {
-                FloatingActionButton(onClick = { showAddDialog = true }) {
-                    Icon(Icons.Default.Add, contentDescription = Strings.ADD_CONTACT)
+                Box {
+                    FloatingActionButton(onClick = {
+                        // У компаньона контакты заводит телефон — остаётся только группа.
+                        if (isCompanionMode) showCreateGroup = true else showFabMenu = true
+                    }) {
+                        Icon(Icons.Default.Add, contentDescription = Strings.ADD)
+                    }
+                    DropdownMenu(expanded = showFabMenu, onDismissRequest = { showFabMenu = false }) {
+                        DropdownMenuItem(
+                            text = { Text(Strings.ADD_CONTACT) },
+                            leadingIcon = { Icon(Icons.Default.PersonAdd, null) },
+                            onClick = { showFabMenu = false; showAddDialog = true }
+                        )
+                        DropdownMenuItem(
+                            text = { Text(Strings.CREATE_GROUP) },
+                            leadingIcon = { Icon(Icons.Default.Groups, null) },
+                            onClick = { showFabMenu = false; showCreateGroup = true }
+                        )
+                    }
                 }
             }
         }
     ) { innerPadding ->
         Column(modifier = Modifier.padding(innerPadding).fillMaxSize()) {
-            if (contacts.isEmpty()) {
+            if (contacts.isEmpty() && groups.isEmpty()) {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = androidx.compose.ui.Alignment.Center) {
                     Text(
                         text = Strings.NO_CHATS,
@@ -97,7 +127,55 @@ fun ChatListScreen(
                     modifier = Modifier.fillMaxSize(),
                     contentPadding = PaddingValues(16.dp)
                 ) {
-                    items(contacts.size) { index ->
+                    items(groups.size, key = { "g" + groups[it].chatId.toHexString() }) { index ->
+                        val group = groups[index]
+                        val hexId = group.chatId.toHexString()
+                        val unreadCount = unreadCounts[hexId] ?: 0
+                        val lastMessage = allMessages[hexId]?.lastOrNull()
+                        ListItem(
+                            headlineContent = {
+                                Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                                    Text(group.title, modifier = Modifier.weight(1f))
+                                    if (!group.joined) {
+                                        Text(
+                                            Strings.GROUP_LEFT_BADGE,
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.outline
+                                        )
+                                    }
+                                }
+                            },
+                            supportingContent = {
+                                Text(
+                                    text = lastMessage?.let { if (it.mine) Strings.YOU_PREFIX.format(it.body) else it.body }
+                                        ?: Strings.GROUP_NO_MESSAGES,
+                                    maxLines = 1,
+                                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                                )
+                            },
+                            leadingContent = {
+                                val avatar = groupAvatars[hexId] ?: viewModel.getGroupAvatar(group.chatId)
+                                if (avatar != null) {
+                                    Avatar(avatarBytes = avatar, name = group.title)
+                                } else {
+                                    Surface(
+                                        modifier = Modifier.size(40.dp),
+                                        shape = androidx.compose.foundation.shape.CircleShape,
+                                        color = MaterialTheme.colorScheme.tertiaryContainer
+                                    ) {
+                                        Box(contentAlignment = androidx.compose.ui.Alignment.Center) {
+                                            Icon(Icons.Default.Groups, null, tint = MaterialTheme.colorScheme.onTertiaryContainer)
+                                        }
+                                    }
+                                }
+                            },
+                            trailingContent = {
+                                if (unreadCount > 0) Badge { Text(unreadCount.toString()) }
+                            },
+                            modifier = Modifier.clickable { onChatClick(group.chatId) }
+                        )
+                    }
+                    items(contacts.size, key = { "c" + contacts[it].chatId.toHexString() }) { index ->
                         val contact = contacts[index]
                         val hexId = contact.chatId.toHexString()
                         val unreadCount = unreadCounts[hexId] ?: 0
@@ -154,6 +232,19 @@ fun ChatListScreen(
                 }
             }
         }
+    }
+
+    if (showCreateGroup) {
+        val notices = viewModel.groupNotices
+        CreateGroupDialog(
+            joinNotice = notices.join,
+            maxTitleChars = notices.maxTitleChars,
+            onDismiss = { showCreateGroup = false },
+            onConfirm = { title ->
+                viewModel.createGroup(title)
+                showCreateGroup = false
+            }
+        )
     }
 
     if (showAddDialog) {

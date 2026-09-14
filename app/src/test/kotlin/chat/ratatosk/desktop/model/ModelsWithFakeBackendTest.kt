@@ -2,6 +2,8 @@ package chat.ratatosk.desktop.model
 
 import chat.ratatosk.desktop.backend.AppEvent
 import chat.ratatosk.desktop.backend.Backend
+import chat.ratatosk.desktop.backend.Group
+import chat.ratatosk.desktop.backend.GroupMember
 import chat.ratatosk.desktop.data.SettingsRepository
 import chat.ratatosk.desktop.util.toHexString
 import kotlinx.coroutines.CoroutineScope
@@ -13,6 +15,7 @@ import kotlinx.coroutines.flow.SharedFlow
 import org.junit.After
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -60,8 +63,8 @@ class ModelsWithFakeBackendTest {
     @Test
     fun historyReplacesMessagesAndIsRequestedOncePerChat() {
         val chats = ChatsModel(session)
-        chats.onEvent(AppEvent.ChatsLoaded(listOf(contact(chatA, ikA)), fresh = true))
-        chats.onEvent(AppEvent.ChatsLoaded(listOf(contact(chatA, ikA)), fresh = true))
+        chats.onEvent(AppEvent.ChatsLoaded(listOf(contact(chatA, ikA)), emptyList(), fresh = true))
+        chats.onEvent(AppEvent.ChatsLoaded(listOf(contact(chatA, ikA)), emptyList(), fresh = true))
         waitUntil { backend.calls.any { it.startsWith("requestHistory") } }
         Thread.sleep(50)
         assertEquals(1, backend.calls.count { it == "requestHistory:${chatA.toHexString()}:100" })
@@ -85,7 +88,7 @@ class ModelsWithFakeBackendTest {
     @Test
     fun avatarsAreKeyedByPeerIkAndRequestedOnce() {
         val contacts = ContactsModel(session)
-        contacts.onEvent(AppEvent.ChatsLoaded(listOf(contact(chatA, ikA)), fresh = true))
+        contacts.onEvent(AppEvent.ChatsLoaded(listOf(contact(chatA, ikA)), emptyList(), fresh = true))
         assertNull(contacts.getAvatarOf(ikA))
         assertNull(contacts.getAvatarOf(ikA))
         waitUntil { backend.calls.any { it.startsWith("requestAvatar") } }
@@ -109,6 +112,40 @@ class ModelsWithFakeBackendTest {
         assertNull(session.error.value)
     }
 
+    @Test
+    fun companionGroupRightsComeFromMembers() {
+        val groups = GroupsModel(session)
+        groups.onEvent(AppEvent.ChatsLoaded(emptyList(), listOf(group(chatB, joined = true, canManage = null)), fresh = true))
+        // Состава ещё нет — распоряжаться нельзя.
+        assertFalse(groups.canManageGroup(chatB))
+
+        groups.onEvent(AppEvent.MembersLoaded(chatB, listOf(
+            GroupMember(chatA, "Я", isMe = true, isOwner = true),
+            GroupMember(ByteArray(16) { 9 }, "Б", isMe = false, isOwner = false),
+        )))
+        assertTrue(groups.canManageGroup(chatB))
+    }
+
+    @Test
+    fun leftOwnerCannotManage() {
+        val groups = GroupsModel(session)
+        groups.onEvent(AppEvent.ChatsLoaded(emptyList(), listOf(group(chatB, joined = false, canManage = true)), fresh = true))
+        assertFalse(groups.canManageGroup(chatB))
+    }
+
+    @Test
+    fun groupCommandsReachBackendAndGroupsGetHistory() {
+        val groups = GroupsModel(session)
+        val chats = ChatsModel(session)
+        val event = AppEvent.ChatsLoaded(emptyList(), listOf(group(chatB, joined = true, canManage = true)), fresh = true)
+        groups.onEvent(event)
+        chats.onEvent(event)
+        groups.evictFromGroup(chatB, chatA)
+        groups.leaveGroup(chatB)
+        waitUntil { backend.calls.contains("leave") && backend.calls.contains("evict:${chatA.toHexString()}") }
+        waitUntil { backend.calls.contains("requestHistory:${chatB.toHexString()}:100") }
+    }
+
     // --- Подставной Backend ------------------------------------------------
 
     private class FakeBackend(override val isCompanion: Boolean) : Backend {
@@ -123,6 +160,13 @@ class ModelsWithFakeBackendTest {
         override fun setMyAvatar(bytes: ByteArray?) = rec("setMyAvatar")
         override fun addSharedContact(msgId: ByteArray) = rec("addSharedContact")
         override fun shareContact(chatId: ByteArray, whoChatId: ByteArray?) = rec("shareContact")
+        override fun createGroup(title: String) = rec("create:$title")
+        override fun renameGroup(chatId: ByteArray, title: String) = rec("rename:$title")
+        override fun inviteToGroup(chatId: ByteArray, memberChatId: ByteArray) = rec("invite:${memberChatId.toHexString()}")
+        override fun evictFromGroup(chatId: ByteArray, memberChatId: ByteArray) = rec("evict:${memberChatId.toHexString()}")
+        override fun leaveGroup(chatId: ByteArray) = rec("leave")
+        override fun setGroupAvatar(chatId: ByteArray, bytes: ByteArray?) = rec("groupAvatar")
+        override fun requestMembers(chatId: ByteArray) = rec("members")
         override fun requestHistory(chatId: ByteArray, limit: UInt) = rec("requestHistory:${chatId.toHexString()}:$limit")
         override fun chatOpened(chatId: ByteArray) = rec("chatOpened")
         override fun sendText(chatId: ByteArray, text: String) = rec("sendText:${chatId.toHexString()}:$text")
@@ -153,6 +197,9 @@ class ModelsWithFakeBackendTest {
             cardVersion = 0UL, addedMs = 0UL, reachability = FfiReachability(emptyList(), null, null),
             directChannel = null, anomalies = FfiAnomalies(0UL, 0UL, 0UL, 0UL, 0UL), ygg = null, nostrRelays = emptyList(),
         )
+
+        fun group(chatId: ByteArray, joined: Boolean, canManage: Boolean?) =
+            Group(chatId, "Группа", joined, canManage, avatarMs = 0UL, createdMs = null)
 
         fun message(msgId: ByteArray) = FfiMessage(
             msgId = msgId, body = "x", mine = false, wallMs = 0UL, status = FfiDeliveryStatus.DELIVERED,

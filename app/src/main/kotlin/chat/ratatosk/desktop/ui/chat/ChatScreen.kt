@@ -78,6 +78,11 @@ fun ChatScreen(
     val contact = remember(contacts, chatIdHex) {
         contacts.find { it.chatId.toHexString() == chatIdHex }
     }
+    val groups by viewModel.groups.collectAsState()
+    val groupAvatars by viewModel.groupAvatars.collectAsState()
+    val group = remember(groups, chatIdHex) {
+        groups.find { it.chatId.toHexString() == chatIdHex }
+    }
 
     val displayMessages = remember(messages) { messages.reversed() }
 
@@ -104,6 +109,14 @@ fun ChatScreen(
                             modifier = Modifier.clickable { onHeaderClick() },
                             verticalAlignment = Alignment.CenterVertically
                         ) {
+                            group?.let {
+                                Avatar(
+                                    avatarBytes = groupAvatars[chatIdHex] ?: viewModel.getGroupAvatar(it.chatId),
+                                    name = it.title,
+                                    size = 32.dp
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                            }
                             contact?.let {
                                 Avatar(
                                     avatarBytes = it.peerIk.toHexString().let { ik -> contactAvatars[ik] } ?: viewModel.getAvatarOf(it.peerIk),
@@ -113,7 +126,14 @@ fun ChatScreen(
                                 Spacer(modifier = Modifier.width(8.dp))
                             }
                             Column {
-                                Text(contact?.let { it.localName ?: it.displayName } ?: Strings.CHATS)
+                                Text(group?.title ?: contact?.let { it.localName ?: it.displayName } ?: Strings.CHATS)
+                                if (group != null) {
+                                    Text(
+                                        text = if (group.joined) Strings.GROUP_INFO else Strings.GROUP_LEFT_BADGE,
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.outline
+                                    )
+                                }
                                 if (contact?.seenOnLan == true) {
                                     Text(
                                         text = Strings.ONLINE_LAN,
@@ -179,6 +199,17 @@ fun ChatScreen(
             }
         },
         bottomBar = {
+            // Вышедший из группы читает, но не пишет: ядро отказало бы.
+            if (group != null && !group.joined) {
+                Surface(tonalElevation = 2.dp, modifier = Modifier.fillMaxWidth()) {
+                    Text(
+                        Strings.GROUP_YOU_LEFT,
+                        modifier = Modifier.padding(16.dp),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.outline
+                    )
+                }
+            } else {
             Surface(tonalElevation = 2.dp) {
                 Column {
                     // Reply Preview
@@ -190,7 +221,7 @@ fun ChatScreen(
                             Box(modifier = Modifier.width(4.dp).height(32.dp).background(MaterialTheme.colorScheme.primary))
                             Spacer(Modifier.width(8.dp))
                             Column(modifier = Modifier.weight(1f)) {
-                                Text(if (msg.mine) "Вы" else (contact?.localName ?: contact?.displayName ?: "???"), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
+                                Text(if (msg.mine) "Вы" else (msg.author ?: contact?.localName ?: contact?.displayName ?: "???"), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
                                 Text(msg.body, style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
                             }
                             IconButton(onClick = { replyingTo = null }) {
@@ -279,6 +310,7 @@ fun ChatScreen(
                         }
                     }
                 }
+            }
             }
         },
         snackbarHost = { SnackbarHost(remember { SnackbarHostState() }) }

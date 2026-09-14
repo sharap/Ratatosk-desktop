@@ -21,14 +21,21 @@ sealed interface AppEvent {
     data class Refused(val reason: String) : AppEvent
 
     // --- Список чатов и лица ---------------------------------------------
-    /** Список чатов целиком. [fresh] ложно, пока показан снимок из кэша. */
-    data class ChatsLoaded(val chats: List<FfiContact>, val fresh: Boolean) : AppEvent
+    /** Список чатов целиком: личные и группы. [fresh] ложно, пока показан снимок из кэша. */
+    data class ChatsLoaded(val chats: List<FfiContact>, val groups: List<Group>, val fresh: Boolean) : AppEvent
     /** Список устарел — перезапросить. */
     data object ChatsChanged : AppEvent
     /** Лицо чата; `chatId == null` — своё. `bytes == null` — лица нет. */
     data class AvatarLoaded(val chatId: ByteArray?, val bytes: ByteArray?) : AppEvent
     /** Лицо сменилось — перезапросить. */
     data class AvatarChanged(val chatId: ByteArray?) : AppEvent
+
+    // --- Группы -----------------------------------------------------------
+    data class MembersLoaded(val chatId: ByteArray, val members: List<GroupMember>) : AppEvent
+    /** Состав или права в группе изменились — перечитать состав. */
+    data class GroupChanged(val chatId: ByteArray) : AppEvent
+    /** Заведённая нами группа появилась. */
+    data class GroupCreated(val chatId: ByteArray) : AppEvent
 
     // --- Переписка --------------------------------------------------------
     /** Последние сообщения чата — заменяют показанные. */

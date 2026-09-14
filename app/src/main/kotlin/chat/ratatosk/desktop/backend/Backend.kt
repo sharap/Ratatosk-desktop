@@ -34,6 +34,23 @@ interface Backend {
     /** Послать в [chatId] карточку человека из [whoChatId]; `null` — свою. */
     fun shareContact(chatId: ByteArray, whoChatId: ByteArray?)
 
+    // --- Группы (§11) ------------------------------------------------------
+    // Предупреждения §11.4–11.5 (groupJoinNotice, evictionNotice, leaveNotice,
+    // ownerLeaveNotice) показывает окно **до** вызова — телефон и ядро за этим
+    // не следят и следить не могут (DESKTOP.md, «Группы»).
+
+    /** Ответ — [AppEvent.GroupCreated] и новый список чатов. */
+    fun createGroup(title: String)
+    fun renameGroup(chatId: ByteArray, title: String)
+    /** Позвать может любой участник; позванный обязан быть контактом. */
+    fun inviteToGroup(chatId: ByteArray, memberChatId: ByteArray)
+    /** Только создатель; себя исключить нельзя. */
+    fun evictFromGroup(chatId: ByteArray, memberChatId: ByteArray)
+    fun leaveGroup(chatId: ByteArray)
+    fun setGroupAvatar(chatId: ByteArray, bytes: ByteArray?)
+    /** Ответ — [AppEvent.MembersLoaded]. */
+    fun requestMembers(chatId: ByteArray)
+
     // --- Переписка --------------------------------------------------------
     fun requestHistory(chatId: ByteArray, limit: UInt)
     /** Чат открыт на экране. */

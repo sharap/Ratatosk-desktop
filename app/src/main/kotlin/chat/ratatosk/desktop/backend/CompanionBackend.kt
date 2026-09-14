@@ -63,7 +63,17 @@ class CompanionBackend(val companion: RatatoskCompanion) : Backend {
             is FfiCompanionEvent.Unlinked, is FfiCompanionEvent.Revoked -> emit(AppEvent.Unlinked)
             is FfiCompanionEvent.Refused -> emit(AppEvent.Refused(event.reason))
 
-            is FfiCompanionEvent.Chats -> emit(AppEvent.ChatsLoaded(event.chats.map { mapCompanionChat(it) }, event.fresh))
+            is FfiCompanionEvent.Chats -> {
+                val (groups, personal) = event.chats.partition { it.isGroup }
+                emit(AppEvent.ChatsLoaded(personal.map { mapCompanionChat(it) }, groups.map { mapCompanionGroup(it) }, event.fresh))
+            }
+            is FfiCompanionEvent.Members -> emit(AppEvent.MembersLoaded(event.chatId, event.members.map {
+                GroupMember(chatId = it.chatId, name = it.name, isMe = it.mine, isOwner = it.owner)
+            }))
+            is FfiCompanionEvent.GroupCreated -> {
+                emit(AppEvent.ChatsChanged)
+                emit(AppEvent.GroupCreated(event.chatId))
+            }
             is FfiCompanionEvent.ChatsChanged -> emit(AppEvent.ChatsChanged)
             is FfiCompanionEvent.Avatar -> emit(AppEvent.AvatarLoaded(event.chatId, event.bytes))
             is FfiCompanionEvent.AvatarChanged -> emit(AppEvent.AvatarChanged(event.chatId))
@@ -104,6 +114,16 @@ class CompanionBackend(val companion: RatatoskCompanion) : Backend {
     override fun setMyAvatar(bytes: ByteArray?) = companion.setAvatar(bytes)
     override fun addSharedContact(msgId: ByteArray) = companion.addSharedContact(msgId)
     override fun shareContact(chatId: ByteArray, whoChatId: ByteArray?) = companion.shareContact(chatId, whoChatId)
+
+    // --- Группы -----------------------------------------------------------
+
+    override fun createGroup(title: String) = companion.createGroup(title)
+    override fun renameGroup(chatId: ByteArray, title: String) = companion.renameGroup(chatId, title)
+    override fun inviteToGroup(chatId: ByteArray, memberChatId: ByteArray) = companion.inviteToGroup(chatId, memberChatId)
+    override fun evictFromGroup(chatId: ByteArray, memberChatId: ByteArray) = companion.evictFromGroup(chatId, memberChatId)
+    override fun leaveGroup(chatId: ByteArray) = companion.leaveGroup(chatId)
+    override fun setGroupAvatar(chatId: ByteArray, bytes: ByteArray?) = companion.setGroupAvatar(chatId, bytes)
+    override fun requestMembers(chatId: ByteArray) = companion.members(chatId)
 
     // --- Переписка --------------------------------------------------------
 

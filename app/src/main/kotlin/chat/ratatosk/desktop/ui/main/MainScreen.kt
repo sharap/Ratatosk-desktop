@@ -31,6 +31,7 @@ import chat.ratatosk.desktop.ui.components.Avatar
 import chat.ratatosk.desktop.ui.components.AddContactDialog
 import chat.ratatosk.desktop.ui.contacts.ContactDetailsScreen
 import chat.ratatosk.desktop.ui.contacts.ContactsScreen
+import chat.ratatosk.desktop.ui.groups.GroupDetailsScreen
 import chat.ratatosk.desktop.ui.profile.ProfileScreen
 import chat.ratatosk.desktop.ui.settings.SettingsScreen
 import chat.ratatosk.desktop.util.toHexString
@@ -55,6 +56,7 @@ fun MainScreen(
     val navigator = rememberListDetailPaneScaffoldNavigator<String>()
     val activeChatId by viewModel.activeChatIdFlow.collectAsState()
     val activeContactId by viewModel.activeContactIdFlow.collectAsState()
+    val activeGroupId by viewModel.activeGroupIdFlow.collectAsState()
     val contacts by viewModel.contacts.collectAsState()
     val contactAvatars by viewModel.contactAvatars.collectAsState()
 
@@ -74,17 +76,22 @@ fun MainScreen(
     
     val currentTab by remember(selectedTabIndex) { derivedStateOf { visibleTabs[selectedTabIndex] } }
 
-    val isDetailOpen by remember(selectedTabIndex, activeChatId, activeContactId) {
+    val isDetailOpen by remember(selectedTabIndex, activeChatId, activeContactId, activeGroupId) {
         derivedStateOf {
             val tab = visibleTabs[selectedTabIndex]
-            (tab == MainTab.CHATS && activeChatId != null) ||
+            (tab == MainTab.CHATS && (activeChatId != null || activeGroupId != null)) ||
             (tab == MainTab.CONTACTS && activeContactId != null)
         }
     }
 
     // Sync navigator with ViewModel state
-    LaunchedEffect(activeChatId, activeContactId) {
-        if (activeChatId != null) {
+    LaunchedEffect(activeChatId, activeContactId, activeGroupId) {
+        if (activeGroupId != null) {
+            val key = "group_${activeGroupId!!.toHexString()}"
+            if (navigator.currentDestination?.contentKey != key) {
+                navigator.navigateTo(ListDetailPaneScaffoldRole.Detail, key)
+            }
+        } else if (activeChatId != null) {
             val key = "chat_${activeChatId!!.toHexString()}"
             if (navigator.currentDestination?.contentKey != key) {
                 navigator.navigateTo(ListDetailPaneScaffoldRole.Detail, key)
@@ -102,6 +109,7 @@ fun MainScreen(
         if (navigator.currentDestination?.pane == ListDetailPaneScaffoldRole.List) {
             if (activeChatId != null) viewModel.setActiveChat(null)
             if (activeContactId != null) viewModel.setActiveContact(null)
+            if (activeGroupId != null) viewModel.setActiveGroup(null)
         }
     }
 
@@ -165,7 +173,7 @@ fun MainScreen(
                         isCompact = true,
                         chatGridState = chatGridState,
                         contactsGridState = contactsGridState,
-                        showFab = !isCompanionMode
+                        showFab = true
                     )
                 }
 
@@ -386,11 +394,31 @@ fun DetailPaneContent(
                         viewModel.setActiveChat(null)
                         scope.launch { navigator.navigateBack() }
                     },
-                    onHeaderClick = { 
-                        if (!isCompanionMode) viewModel.setActiveContact(effectiveChatId) 
+                    onHeaderClick = {
+                        if (viewModel.getGroup(effectiveChatId) != null) {
+                            viewModel.setActiveGroup(effectiveChatId)
+                        } else if (!isCompanionMode) {
+                            viewModel.setActiveContact(effectiveChatId)
+                        }
                     },
                     showBackButton = showBackButton,
                     isCompact = isCompact
+                )
+            }
+        } else if (contentKey.startsWith("group_")) {
+            val groupId = remember(contentKey) {
+                try { contentKey.removePrefix("group_").hexToByteArray() } catch (e: Exception) { null }
+            }
+            if (groupId != null) {
+                GroupDetailsScreen(
+                    viewModel = viewModel,
+                    chatId = groupId,
+                    onBack = {
+                        viewModel.setActiveGroup(null)
+                        viewModel.setActiveChat(groupId)
+                    },
+                    onOpenChat = { viewModel.setActiveChat(groupId) },
+                    showBackButton = true
                 )
             }
         } else if (contentKey.startsWith("contact_")) {

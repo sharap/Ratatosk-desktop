@@ -54,8 +54,20 @@ class ClientBackend(val client: RatatoskClient) : Backend {
             is FfiEvent.MessageEdited -> emit(AppEvent.MessagesChanged(event.chatId))
             is FfiEvent.ReactionChanged -> emit(AppEvent.MessagesChanged(event.chatId))
             is FfiEvent.MessagesDeleted -> emit(AppEvent.MessagesChanged(event.chatId))
-            is FfiEvent.ContactAdded, is FfiEvent.ContactChanged, is FfiEvent.ContactRemoved,
-            is FfiEvent.GroupMembershipChanged -> emit(AppEvent.ChatsChanged)
+            is FfiEvent.ContactAdded, is FfiEvent.ContactChanged, is FfiEvent.ContactRemoved -> emit(AppEvent.ChatsChanged)
+            is FfiEvent.GroupCreated -> {
+                emit(AppEvent.ChatsChanged)
+                emit(AppEvent.GroupCreated(event.chatId))
+            }
+            is FfiEvent.GroupRenamed -> emit(AppEvent.ChatsChanged)
+            is FfiEvent.GroupMembershipChanged -> {
+                emit(AppEvent.ChatsChanged)
+                emit(AppEvent.GroupChanged(event.chatId))
+            }
+            is FfiEvent.GroupAvatarChanged -> {
+                emit(AppEvent.AvatarChanged(event.chatId))
+                emit(AppEvent.ChatsChanged)
+            }
             is FfiEvent.AvatarChanged -> {
                 // Ядро называет человека ключом; экрану нужен его чат.
                 val chatId = runCatching { client.contacts().find { it.peerIk.contentEquals(event.peerIk) }?.chatId }.getOrNull()
@@ -79,12 +91,27 @@ class ClientBackend(val client: RatatoskClient) : Backend {
     // --- Чаты и лица ------------------------------------------------------
 
     override fun requestChats() {
-        emit(AppEvent.ChatsLoaded(client.contacts(), fresh = true))
+        emit(AppEvent.ChatsLoaded(client.contacts(), client.groups().map { it.toGroup() }, fresh = true))
     }
+
+    // Создатель, ушедший из группы, остаётся создателем — но распоряжаться
+    // может только вернувшись (`FfiGroup::mine`).
+    private fun org.ratatosk.core.FfiGroup.toGroup() = Group(
+        chatId = chatId,
+        title = title,
+        joined = joined,
+        canManage = mine && joined,
+        avatarMs = avatarMs,
+        createdMs = createdMs,
+    )
 
     override fun requestAvatar(chatId: ByteArray?) {
         if (chatId == null) {
             emit(AppEvent.AvatarLoaded(null, client.myAvatar()))
+            return
+        }
+        if (groupOf(chatId) != null) {
+            emit(AppEvent.AvatarLoaded(chatId, client.groupAvatar(chatId)))
             return
         }
         val peerIk = peerIkOf(chatId) ?: return
@@ -107,6 +134,48 @@ class ClientBackend(val client: RatatoskClient) : Backend {
 
     private fun peerIkOf(chatId: ByteArray): ByteArray? =
         client.contacts().find { it.chatId.contentEquals(chatId) }?.peerIk
+
+    private fun groupOf(chatId: ByteArray) = client.groups().find { it.chatId.contentEquals(chatId) }
+
+    /** `chatId` личного чата — первые 16 байт `IK` (ядро, `chat_id_for`). */
+    private fun chatIdOfIk(ik: ByteArray): ByteArray = ik.copyOf(16)
+
+    // --- Группы -----------------------------------------------------------
+
+    override fun createGroup(title: String) = client.createGroup(title)
+    override fun renameGroup(chatId: ByteArray, title: String) = client.renameGroup(chatId, title)
+    override fun leaveGroup(chatId: ByteArray) = client.leaveGroup(chatId)
+
+    override fun setGroupAvatar(chatId: ByteArray, bytes: ByteArray?) {
+        client.setGroupAvatar(chatId, bytes)
+        emit(AppEvent.AvatarLoaded(chatId, bytes))
+    }
+
+    override fun inviteToGroup(chatId: ByteArray, memberChatId: ByteArray) {
+        val peerIk = peerIkOf(memberChatId) ?: throw IllegalArgumentException("Only a contact can be invited")
+        client.inviteToGroup(chatId, peerIk)
+    }
+
+    override fun evictFromGroup(chatId: ByteArray, memberChatId: ByteArray) {
+        // Участник может и не быть контактом: ключ берём из состава группы.
+        val ik = groupOf(chatId)?.members?.find { chatIdOfIk(it.ik).contentEquals(memberChatId) }?.ik
+            ?: throw IllegalArgumentException("Not a member of this group")
+        client.evictFromGroup(chatId, ik)
+    }
+
+    override fun requestMembers(chatId: ByteArray) {
+        val group = groupOf(chatId) ?: return
+        val members = group.members.map {
+            GroupMember(
+                chatId = chatIdOfIk(it.ik),
+                name = it.name,
+                isMe = it.mine,
+                // Клиент знает только, создатели ли мы сами.
+                isOwner = if (it.mine) group.mine else null,
+            )
+        }
+        emit(AppEvent.MembersLoaded(chatId, members))
+    }
 
     // --- Переписка --------------------------------------------------------
 

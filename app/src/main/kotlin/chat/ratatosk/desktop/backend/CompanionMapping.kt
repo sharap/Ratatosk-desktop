@@ -38,6 +38,16 @@ internal fun mapCompanionChat(chat: FfiCompanionChat): FfiContact {
     )
 }
 
+/** Права в группе компаньон узнаёт из состава (`mine && owner`), здесь их ещё нет. */
+internal fun mapCompanionGroup(chat: FfiCompanionChat): Group = Group(
+    chatId = chat.chatId,
+    title = chat.title,
+    joined = chat.joined,
+    canManage = null,
+    avatarMs = chat.avatarMs,
+    createdMs = null,
+)
+
 internal fun mapCompanionMessage(msg: FfiCompanionMessage): FfiMessage {
     return FfiMessage(
         msgId = msg.msgId,
