@@ -23,6 +23,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import chat.ratatosk.desktop.ui.RatatoskViewModel
 import chat.ratatosk.desktop.ui.Strings
+import chat.ratatosk.desktop.ui.components.SecretTextField
 import chat.ratatosk.desktop.util.FilePicker
 import chat.ratatosk.desktop.util.FileUtils
 import org.ratatosk.core.FfiTransport
@@ -611,7 +612,7 @@ fun MailSetupDialog(
                     )
                 } else {
                     OutlinedTextField(value = address, onValueChange = { address = it }, label = { Text(Strings.MAIL_ADDRESS) }, modifier = Modifier.fillMaxWidth())
-                    OutlinedTextField(value = password, onValueChange = { password = it }, label = { Text(Strings.MAIL_PASSWORD) }, modifier = Modifier.fillMaxWidth())
+                    SecretTextField(value = password, onValueChange = { password = it }, label = Strings.MAIL_PASSWORD, modifier = Modifier.fillMaxWidth())
                     
                     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         OutlinedTextField(value = imapHost, onValueChange = { imapHost = it }, label = { Text(Strings.MAIL_IMAP_HOST) }, modifier = Modifier.weight(1f))

@@ -113,9 +113,11 @@ class SettingsRepository {
         val raw = preferences[Keys.COMPANION_PAIRINGS] ?: ""
         if (raw.isEmpty()) emptyList()
         else {
-            raw.split(";;").filter { it.isNotBlank() }.map { 
+            // Испорченная запись пропускается, а не роняет приложение на старте.
+            raw.split(";;").filter { it.isNotBlank() }.mapNotNull {
                 val parts = it.split("||")
-                CompanionPairing(parts[0], parts[1], parts[2], parts[3].toBoolean())
+                if (parts.size != 4 || parts[0].isBlank() || parts[1].isBlank()) null
+                else CompanionPairing(parts[0], parts[1], parts[2], parts[3].toBoolean())
             }
         }
     }
@@ -124,7 +126,9 @@ class SettingsRepository {
         dataStore.edit { preferences ->
             val current = preferences[Keys.COMPANION_PAIRINGS] ?: ""
             val pairings = current.split(";;").filter { it.isNotBlank() }.toMutableList()
-            val entry = "${pairing.deviceId}||${pairing.inviteUri}||${pairing.phoneName}||${pairing.useCache}"
+            // Имя телефона задаёт его владелец: разделители формата из него убираем.
+            val phoneName = pairing.phoneName.replace("||", "|").replace(";;", ";")
+            val entry = "${pairing.deviceId}||${pairing.inviteUri}||$phoneName||${pairing.useCache}"
             // Remove old if exists
             pairings.removeAll { it.startsWith("${pairing.deviceId}||") }
             pairings.add(entry)

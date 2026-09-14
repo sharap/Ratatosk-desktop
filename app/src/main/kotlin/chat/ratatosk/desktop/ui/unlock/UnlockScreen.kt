@@ -9,6 +9,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import chat.ratatosk.desktop.ui.RatatoskViewModel
 import chat.ratatosk.desktop.ui.Strings
+import chat.ratatosk.desktop.ui.components.SecretTextField
 import org.ratatosk.core.FfiAccount
 
 @Composable
@@ -53,11 +54,12 @@ fun UnlockScreen(viewModel: RatatoskViewModel, account: FfiAccount) {
             Spacer(modifier = Modifier.height(16.dp))
         }
 
-        OutlinedTextField(
+        SecretTextField(
             value = pin,
             onValueChange = { pin = it },
-            label = { Text(Strings.ENTER_PIN) },
-            modifier = Modifier.fillMaxWidth(0.8f)
+            label = Strings.ENTER_PIN,
+            modifier = Modifier.fillMaxWidth(0.8f),
+            onSubmit = { viewModel.unlock(account, pin.takeIf { it.isNotEmpty() }) }
         )
 
         Spacer(modifier = Modifier.height(24.dp))

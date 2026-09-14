@@ -9,7 +9,7 @@ object ClipboardUtils {
             val selection = StringSelection(text)
             Toolkit.getDefaultToolkit().systemClipboard.setContents(selection, selection)
         } catch (e: Exception) {
-            System.err.println("Failed to copy to clipboard: ${e.message}")
+            Log.w("ClipboardUtils", "Failed to copy to clipboard", e)
         }
     }
 }

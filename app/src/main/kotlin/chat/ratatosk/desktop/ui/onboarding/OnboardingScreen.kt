@@ -13,6 +13,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import chat.ratatosk.desktop.ui.RatatoskViewModel
 import chat.ratatosk.desktop.ui.Strings
+import chat.ratatosk.desktop.ui.components.SecretTextField
 
 @Composable
 fun OnboardingScreen(viewModel: RatatoskViewModel) {
@@ -24,6 +25,11 @@ fun OnboardingScreen(viewModel: RatatoskViewModel) {
     val availableAccounts by viewModel.availableAccounts.collectAsState()
     
     var showCompanionSetup by remember { mutableStateOf(false) }
+    var showNoPinWarning by remember { mutableStateOf(false) }
+
+    val createIdentity = {
+        viewModel.initialize(label, pin.takeIf { it.isNotEmpty() }, displayName.takeIf { it.isNotEmpty() } ?: "User")
+    }
 
     Column(
         modifier = Modifier
@@ -80,10 +86,10 @@ fun OnboardingScreen(viewModel: RatatoskViewModel) {
 
         Spacer(modifier = Modifier.height(8.dp))
 
-        OutlinedTextField(
+        SecretTextField(
             value = pin,
             onValueChange = { pin = it },
-            label = { Text(Strings.ENTER_PIN) },
+            label = Strings.ENTER_PIN,
             modifier = Modifier.fillMaxWidth(0.8f)
         )
 
@@ -99,7 +105,9 @@ fun OnboardingScreen(viewModel: RatatoskViewModel) {
                 }
             }
             Button(
-                onClick = { viewModel.initialize(label, pin.takeIf { it.isNotEmpty() }, displayName.takeIf { it.isNotEmpty() } ?: "User") },
+                // Без PIN ключ базы лежит в ней открыто, и ядро требует сказать
+                // об этом до создания (FFI.md, §8.6), а не после.
+                onClick = { if (pin.isEmpty()) showNoPinWarning = true else createIdentity() },
                 modifier = Modifier.weight(1f),
                 enabled = displayName.isNotBlank() && label.isNotBlank()
             ) {
@@ -143,6 +151,28 @@ fun OnboardingScreen(viewModel: RatatoskViewModel) {
                 }
             }
         }
+    }
+
+    if (showNoPinWarning) {
+        val warning = remember { runCatching { org.ratatosk.core.noPinWarning() }.getOrNull() }
+        AlertDialog(
+            onDismissRequest = { showNoPinWarning = false },
+            title = { Text(Strings.NO_PIN_TITLE) },
+            text = { Text(warning ?: Strings.NO_PIN_FALLBACK) },
+            confirmButton = {
+                TextButton(onClick = {
+                    showNoPinWarning = false
+                    createIdentity()
+                }) {
+                    Text(Strings.CREATE_WITHOUT_PIN, color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = {
+                Button(onClick = { showNoPinWarning = false }) {
+                    Text(Strings.CANCEL)
+                }
+            }
+        )
     }
 
     if (showCompanionSetup) {

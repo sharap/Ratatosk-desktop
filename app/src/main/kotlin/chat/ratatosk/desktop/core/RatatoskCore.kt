@@ -10,6 +10,7 @@ import org.ratatosk.core.RatatoskClient
 import org.ratatosk.core.RatatoskCompanion
 import org.ratatosk.core.RatatoskException
 import chat.ratatosk.desktop.util.AppDirs
+import chat.ratatosk.desktop.util.Log
 import chat.ratatosk.desktop.util.toHexString
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
@@ -17,6 +18,8 @@ import kotlinx.coroutines.channels.BufferOverflow
 import java.io.File
 
 object RatatoskCore : EventObserver, CompanionObserver {
+    private const val TAG = "RatatoskCore"
+
     @Volatile
     private var client: RatatoskClient? = null
 
@@ -71,10 +74,9 @@ object RatatoskCore : EventObserver, CompanionObserver {
     fun initialize(accountId: ByteArray, pin: String?, deviceKey: ByteArray? = null, displayName: String): RatatoskClient {
         synchronized(this) {
             val accountIdHex = accountId.toHexString()
-            println("RatatoskCore: Initialize called for account: $accountIdHex. Current client: ${if (client != null) "ACTIVE" else "NULL"}")
+            Log.d(TAG, "initialize: client ${if (client != null) "active" else "none"}")
             
             if (client != null && activeAccountIdHex == accountIdHex) {
-                println("RatatoskCore: Returning existing client for same account")
                 return client!!
             }
 
@@ -84,7 +86,7 @@ object RatatoskCore : EventObserver, CompanionObserver {
             return try {
                 val reg = registry ?: throw IllegalStateException("Registry not initialized")
                 val newClient = reg.openAccount(accountId, pin, deviceKey, displayName)
-                println("RatatoskCore: Native client opened successfully")
+                Log.d(TAG, "account opened")
                 
                 newClient.setObserver(this)
                 newClient.networkChanged() 
@@ -100,8 +102,7 @@ object RatatoskCore : EventObserver, CompanionObserver {
             nativeError = null 
             newClient
             } catch (t: Throwable) {
-                System.err.println("RatatoskCore: Failed to initialize native core for account $accountIdHex: ${t.message}")
-                t.printStackTrace()
+                Log.e(TAG, "Failed to open account", t)
                 nativeError = t
                 throw t
             }
@@ -136,13 +137,18 @@ object RatatoskCore : EventObserver, CompanionObserver {
             activeAccountIdHex = null
             sessionCredentials = null
             isCompanionMode = false
+            // Повтор событий — для подписчика, пришедшего чуть позже открытия.
+            // Следующему аккаунту события прошлого не нужны.
+            @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
+            _events.resetReplayCache()
+            @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
+            _companionEvents.resetReplayCache()
         }
     }
 
     @Throws(RatatoskException::class)
     fun initializeCompanion(inviteUri: String, port: UShort, peerAddr: String?, cachePath: String?): RatatoskCompanion {
         synchronized(this) {
-            println("RatatoskCore: InitializeCompanion called")
             
             client?.destroy()
             client = null
@@ -160,8 +166,7 @@ object RatatoskCore : EventObserver, CompanionObserver {
                 nativeError = null
                 newCompanion
             } catch (t: Throwable) {
-                System.err.println("RatatoskCore: Failed to initialize companion: ${t.message}")
-                t.printStackTrace()
+                Log.e(TAG, "Failed to open companion", t)
                 nativeError = t
                 throw t
             }
@@ -171,28 +176,23 @@ object RatatoskCore : EventObserver, CompanionObserver {
     fun tryAutoInitialize(): RatatoskClient? {
         val creds = sessionCredentials ?: return null
         return try {
-            println("RatatoskCore: Attempting auto-reinitialization for account: ${creds.accountId.toHexString()}")
             initialize(creds.accountId, creds.pin, creds.deviceKey, creds.displayName)
         } catch (e: Exception) {
-            System.err.println("RatatoskCore: Auto-reinitialization failed: ${e.message}")
+            Log.w(TAG, "Auto-reinitialization failed", e)
             null
         }
     }
 
     override fun onEvent(`event`: FfiEvent) {
-        if (`event` is FfiEvent.TorStatus) {
-            println("RatatoskCore: Tor status: [${(`event`.fraction * 100).toInt()}%] ${`event`.note}${`event`.blocked?.let { " (BLOCKED: $it)" } ?: ""}")
-        } else {
-            println("RatatoskCore: Event from native: $`event`")
-        }
-        val success = _events.tryEmit(`event`)
-        if (!success) {
-            System.err.println("RatatoskCore: Event buffer full!")
+        // Только имя события: поля несут тексты сообщений, имена и адреса.
+        Log.d(TAG, "event ${`event`::class.simpleName}")
+        if (!_events.tryEmit(`event`)) {
+            Log.w(TAG, "Event buffer full")
         }
     }
 
     override fun onEvent(`event`: FfiCompanionEvent) {
-        println("RatatoskCore: Companion event: $`event`")
+        Log.d(TAG, "companion event ${`event`::class.simpleName}")
         _companionEvents.tryEmit(`event`)
         
         when (`event`) {

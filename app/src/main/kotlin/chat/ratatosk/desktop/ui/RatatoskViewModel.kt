@@ -3,8 +3,13 @@ package chat.ratatosk.desktop.ui
 import chat.ratatosk.desktop.core.RatatoskCore
 import chat.ratatosk.desktop.data.SettingsRepository
 import chat.ratatosk.desktop.ui.theme.ChatThemeData
+import chat.ratatosk.desktop.util.AppDirs
+import chat.ratatosk.desktop.util.FileUtils
+import chat.ratatosk.desktop.util.ImageUtils
+import chat.ratatosk.desktop.util.Log
 import chat.ratatosk.desktop.util.toHexString
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.*
@@ -15,10 +20,8 @@ import kotlinx.coroutines.ensureActive
 import org.ratatosk.core.*
 import java.util.concurrent.ConcurrentHashMap
 import java.io.File
-import javax.imageio.ImageIO
-import java.awt.Image
-import java.awt.image.BufferedImage
-import java.io.ByteArrayOutputStream
+import java.nio.file.Files
+import java.nio.file.StandardCopyOption
 
 @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
 class RatatoskViewModel(
@@ -189,6 +192,9 @@ class RatatoskViewModel(
     val cardVersion = _cardVersion.asStateFlow()
 
     init {
+        // Копии вложений от прошлого запуска, если он завершился не выходом.
+        viewModelScope.launch(Dispatchers.IO) { AppDirs.clearMediaCache() }
+
         viewModelScope.launch {
             try {
                 RatatoskCore.initializeRegistry()
@@ -425,17 +431,60 @@ class RatatoskViewModel(
     }
 
     fun logout() {
+        // Сначала отписаться, потом закрыть: иначе событие, пришедшее между
+        // закрытием и очисткой, снова наполнит состояние прошлого аккаунта.
+        eventsJob?.cancel()
+        eventsJob = null
+        companionEventsJob?.cancel()
+        companionEventsJob = null
+        activeJobs.values.forEach { it.cancel() }
+        activeJobs.clear()
+        searchJob?.cancel()
+
         RatatoskCore.logout()
+
         _isInitialized.value = false
         _isCompanionMode.value = false
         _isCompanionLinked.value = false
+        _isCompanionFresh.value = false
         _activeAccountId.value = null
         _selectedAccount.value = null
         _isCreatingNewAccount.value = false
+
+        // Всё, что принадлежит сессии. Непустой _onionAddress от прошлого
+        // аккаунта, в частности, не дал бы новому объявить свои адреса.
+        _activeChatId.value = null
+        _activeChatIdFlow.value = null
+        _activeContactIdFlow.value = null
+        _events.value = emptyList()
         _contacts.value = emptyList()
         _messages.value = emptyMap()
         _messageStatuses.value = emptyMap()
+        _repliedMessages.value = emptyMap()
         _unreadCounts.value = emptyMap()
+        _fileProgress.value = emptyMap()
+        _filePreviews.value = emptyMap()
+        _activeJobsFlow.value = emptySet()
+        pendingCompanionSaves.clear()
+        _searchResults.value = emptyList()
+        _isSearching.value = false
+        _torStatus.value = null
+        _mailStatus.value = null
+        _mailAccount.value = null
+        _transportsEnabled.value = emptyMap()
+        _transportsReady.value = emptyMap()
+        _fingerprint.value = null
+        _myAvatar.value = null
+        _contactAvatars.value = emptyMap()
+        _autoAcceptLimit.value = null
+        _onionAddress.value = null
+        _myContactUri.value = null
+        _cardVersion.value = null
+        isAnnouncingTor = false
+
+        // Расшифрованные копии вложений лежат открытым текстом —
+        // переживать выход из аккаунта им незачем.
+        viewModelScope.launch(Dispatchers.IO) { AppDirs.clearMediaCache() }
     }
 
     fun clearError() {
@@ -592,10 +641,11 @@ class RatatoskViewModel(
     }
 
     fun companionSaveFile(fileId: ByteArray, chunkTotal: ULong, name: String) {
-        val destDir = downloadDirPath.value?.let { java.io.File(it) } ?: chat.ratatosk.desktop.util.FileUtils.getDownloadsDir()
-        val destination = java.io.File(destDir, name)
+        val destDir = downloadDirPath.value?.let { File(it) } ?: FileUtils.getDownloadsDir()
         viewModelScope.launch(Dispatchers.IO) {
             try {
+                destDir.mkdirs()
+                val destination = FileUtils.uniqueFile(destDir, FileUtils.safeName(name))
                 RatatoskCore.getCompanion().saveFile(fileId, chunkTotal, destination.absolutePath)
             } catch (e: Exception) {
                 _error.value = "Failed to save file: ${e.message}"
@@ -606,9 +656,7 @@ class RatatoskViewModel(
     fun companionSendFile(chatId: ByteArray, file: java.io.File, text: String) {
         viewModelScope.launch(Dispatchers.IO) {
             try {
-                val preview = if (file.extension.lowercase() in listOf("jpg", "jpeg", "png", "webp")) {
-                    generatePreview(file)
-                } else null
+                val preview = previewFor(file)
                 val outgoing = FfiCompanionOutgoing(file.absolutePath, preview)
                 RatatoskCore.getCompanion().sendFiles(chatId, listOf(outgoing), text)
             } catch (e: Exception) {
@@ -685,9 +733,7 @@ class RatatoskViewModel(
         viewModelScope.launch(Dispatchers.IO) {
             try {
                 val outgoingFiles = files.map { file ->
-                    val preview = if (file.extension.lowercase() in listOf("jpg", "jpeg", "png", "webp")) {
-                        generatePreview(file)
-                    } else null
+                    val preview = previewFor(file)
                     FfiOutgoingFile(file.absolutePath, preview)
                 }
                 RatatoskCore.getClient().sendFiles(chatId, outgoingFiles, text)
@@ -698,28 +744,10 @@ class RatatoskViewModel(
         }
     }
 
-    private fun generatePreview(file: File): ByteArray? {
-        return try {
-            val originalImage = ImageIO.read(file) ?: return null
-            val width = 320
-            val height = 320
-            val ratio = Math.min(width.toDouble() / originalImage.width, height.toDouble() / originalImage.height)
-            if (ratio >= 1.0) return null
-
-            val targetWidth = (originalImage.width * ratio).toInt()
-            val targetHeight = (originalImage.height * ratio).toInt()
-
-            val resultingImage = originalImage.getScaledInstance(targetWidth, targetHeight, Image.SCALE_SMOOTH)
-            val outputImage = BufferedImage(targetWidth, targetHeight, BufferedImage.TYPE_INT_RGB)
-            outputImage.getGraphics().drawImage(resultingImage, 0, 0, null)
-
-            val baos = ByteArrayOutputStream()
-            ImageIO.write(outputImage, "jpg", baos)
-            val bytes = baos.toByteArray()
-            if (bytes.size > maxPreviewBytes().toInt()) null else bytes
-        } catch (e: Exception) {
-            null
-        }
+    private fun previewFor(file: File): ByteArray? {
+        if (file.extension.lowercase() !in listOf("jpg", "jpeg", "png", "webp", "gif", "bmp")) return null
+        val limit = try { maxPreviewBytes().toInt() } catch (e: Exception) { return null }
+        return ImageUtils.makePreview(file, limit)
     }
 
     fun acceptFile(chatId: ByteArray, fileId: ByteArray) {
@@ -767,9 +795,16 @@ class RatatoskViewModel(
         return null
     }
 
-    fun saveFile(file: FfiFile, destination: File, onComplete: (File) -> Unit) {
+    /**
+     * Расшифровывает вложение в [destination].
+     *
+     * Пишется во временный `.part` рядом и переносится на место одним ходом:
+     * недописанный файл не выглядит готовым ни человеку, ни [openFile],
+     * который сверяет размер уже лежащей копии.
+     */
+    fun saveFile(file: FfiFile, destination: File, onFailure: () -> Unit = {}, onComplete: (File) -> Unit) {
         val fileIdHex = file.fileId.toHexString()
-        
+
         if (RatatoskCore.isCompanionMode()) {
             pendingCompanionSaves[fileIdHex] = onComplete
             _activeJobsFlow.update { it + fileIdHex }
@@ -778,63 +813,84 @@ class RatatoskViewModel(
                     destination.parentFile?.mkdirs()
                     RatatoskCore.getCompanion().saveFile(file.fileId, file.chunkTotal, destination.absolutePath)
                 } catch (e: Exception) {
+                    Log.w(TAG, "Companion save failed", e)
                     pendingCompanionSaves.remove(fileIdHex)
                     _activeJobsFlow.update { it - fileIdHex }
+                    _error.value = "Failed to save file: ${e.message}"
+                    withContext(Dispatchers.Main) { onFailure() }
                 }
             }
             return
         }
 
-        val job = viewModelScope.launch(Dispatchers.IO) {
+        // Регистрация до старта: задача, завершившаяся мгновенно, иначе успела
+        // бы снять отметку раньше, чем её поставили, — и спиннер висел бы вечно.
+        lateinit var job: Job
+        job = viewModelScope.launch(Dispatchers.IO, start = CoroutineStart.LAZY) {
+            val part = File(destination.parentFile, destination.name + ".part")
             var reader: FfiFileReader? = null
+            var saved = false
             try {
                 destination.parentFile?.mkdirs()
                 reader = RatatoskCore.getClient().openFile(file.fileId)
-                if (reader == null) return@launch
+                    ?: throw IllegalStateException("File is not available")
 
-                destination.outputStream().use { output ->
+                part.outputStream().use { output ->
                     val total = reader.chunkTotal()
                     for (i in 0UL until total) {
                         ensureActive()
                         val chunk = reader.chunk(i)
-                        if (chunk != null) {
-                            output.write(chunk)
-                            output.flush()
-                            _fileProgress.update { it + (fileIdHex to (i.toFloat() / total.toFloat())) }
-                        }
+                            ?: throw IllegalStateException("File is incomplete")
+                        output.write(chunk)
+                        _fileProgress.update { it + (fileIdHex to ((i + 1UL).toFloat() / total.toFloat())) }
                     }
                 }
+                Files.move(part.toPath(), destination.toPath(), StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE)
+                saved = true
                 _fileProgress.update { it + (fileIdHex to 1f) }
-                viewModelScope.launch { onComplete(destination) }
+                withContext(Dispatchers.Main) { onComplete(destination) }
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
             } catch (e: Exception) {
+                Log.w(TAG, "Failed to save file", e)
+                _error.value = "Failed to save file: ${e.message}"
             } finally {
                 reader?.destroy()
-                activeJobs.remove(fileIdHex)
-                _activeJobsFlow.update { it - fileIdHex }
+                if (!saved) {
+                    part.delete()
+                    viewModelScope.launch { onFailure() }
+                }
+                // Снимаем только свою регистрацию: повторный запуск для того же
+                // файла уже положил сюда новую задачу.
+                if (activeJobs.remove(fileIdHex, job)) {
+                    _activeJobsFlow.update { it - fileIdHex }
+                }
             }
         }
-        activeJobs[fileIdHex]?.cancel()
-        activeJobs[fileIdHex] = job
+        activeJobs.put(fileIdHex, job)?.cancel()
         _activeJobsFlow.update { it + fileIdHex }
+        job.start()
     }
 
     fun downloadFile(file: FfiFile, onComplete: (String) -> Unit) {
-        val destDir = downloadDirPath.value?.let { File(it) } ?: chat.ratatosk.desktop.util.FileUtils.getDownloadsDir()
-        val destination = File(destDir, file.name)
+        val destDir = downloadDirPath.value?.let { File(it) } ?: FileUtils.getDownloadsDir()
+        destDir.mkdirs()
+        // Имя приходит от собеседника: только безопасный сегмент и без затирания
+        // уже лежащего файла с тем же именем.
+        val destination = FileUtils.uniqueFile(destDir, FileUtils.safeName(file.name))
         saveFile(file, destination) { onComplete(it.absolutePath) }
     }
 
     fun openFile(file: FfiFile) {
-        val baseDir = File(System.getProperty("java.io.tmpdir"), "ratatosk_media")
-        val destination = File(baseDir, "${file.fileId.toHexString()}_${file.name}")
-        
+        val destination = File(AppDirs.getMediaCacheDir(), "${file.fileId.toHexString()}_${FileUtils.safeName(file.name)}")
+
         if (destination.exists() && destination.length() == file.sizeBytes.toLong()) {
-            chat.ratatosk.desktop.util.FileUtils.openFile(destination)
+            FileUtils.openFile(destination)
             return
         }
-        
+
         saveFile(file, destination) {
-            chat.ratatosk.desktop.util.FileUtils.openFile(it)
+            FileUtils.openFile(it)
         }
     }
 
@@ -846,11 +902,11 @@ class RatatoskViewModel(
                     RatatoskCore.getCompanion().cancelSave()
                 } catch (e: Exception) { }
             }
+            pendingCompanionSaves.remove(hex)
             _activeJobsFlow.update { it - hex }
             return
         }
-        activeJobs[hex]?.cancel()
-        activeJobs.remove(hex)
+        activeJobs.remove(hex)?.cancel()
         _activeJobsFlow.update { it - hex }
     }
 
@@ -906,8 +962,7 @@ class RatatoskViewModel(
                     _mailAccount.value = ma
                 }
             } catch (e: Exception) {
-                println("RatatoskViewModel: Error refreshing transport status: ${e.message}")
-                e.printStackTrace()
+                Log.w(TAG, "Failed to refresh transport status", e)
             }
         }
     }
@@ -915,12 +970,10 @@ class RatatoskViewModel(
     fun setTransportEnabled(transport: FfiTransport, enabled: Boolean) {
         viewModelScope.launch(Dispatchers.IO) {
             try {
-                println("RatatoskViewModel: Setting transport $transport to $enabled")
                 RatatoskCore.getClient().setTransportEnabled(transport, enabled)
                 refreshTransportStatus()
             } catch (e: Exception) {
                 _error.value = "Failed to toggle transport: ${e.message}"
-                println("RatatoskViewModel: Error setting transport: ${e.message}")
             }
         }
     }
@@ -1006,6 +1059,25 @@ class RatatoskViewModel(
                     _myContactUri.value = uri
                 }
             } catch (e: Exception) { }
+        }
+    }
+
+    /** Копирует свою ссылку в буфер: только по явной просьбе человека. */
+    fun copyMyContactUri(onDone: (Boolean) -> Unit) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val uri = try {
+                RatatoskCore.getClient().myContactUri()
+            } catch (e: Exception) {
+                Log.w(TAG, "Failed to get contact uri", e)
+                null
+            }
+            withContext(Dispatchers.Main) {
+                if (uri != null) {
+                    _myContactUri.value = uri
+                    chat.ratatosk.desktop.util.ClipboardUtils.copyToClipboard(uri)
+                }
+                onDone(uri != null)
+            }
         }
     }
 
@@ -1152,7 +1224,7 @@ class RatatoskViewModel(
                 RatatoskCore.getClient().setAvatar(bytes)
                 _myAvatar.value = bytes
             } catch (e: Exception) {
-                e.printStackTrace()
+                Log.w(TAG, "Failed to set avatar", e)
             }
         }
     }
@@ -1445,6 +1517,10 @@ class RatatoskViewModel(
     }
 
     private fun String.hexToByteArray() = chunked(2).map { it.toInt(16).toByte() }.toByteArray()
+
+    private companion object {
+        const val TAG = "RatatoskViewModel"
+    }
 }
 
 sealed class AccountItem {

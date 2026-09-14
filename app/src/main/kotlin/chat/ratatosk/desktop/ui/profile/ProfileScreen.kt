@@ -46,11 +46,19 @@ fun ProfileScreen(
     val myContactUri by viewModel.myContactUri.collectAsState()
     val scope = rememberCoroutineScope()
     
+    val snackbarHostState = remember { SnackbarHostState() }
+    val copyLink: () -> Unit = {
+        viewModel.copyMyContactUri { copied ->
+            scope.launch { snackbarHostState.showSnackbar(if (copied) Strings.LINK_COPIED else Strings.LINK_COPY_FAILED) }
+        }
+    }
+
     var showMyQr by remember { mutableStateOf(false) }
     var showEditName by remember { mutableStateOf(false) }
     var newName by remember { mutableStateOf("") }
 
     Scaffold(
+        snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             TopAppBar(
                 title = { Text(Strings.PROFILE) },
@@ -126,7 +134,7 @@ fun ProfileScreen(
                         torEnabled = torEnabled,
                         onionAddress = onionAddress,
                         onShowQr = { showMyQr = true },
-                        onCopyLink = { viewModel.getMyContactUri() }
+                        onCopyLink = copyLink
                     )
 
                     Spacer(modifier = Modifier.height(32.dp))
@@ -171,7 +179,7 @@ fun ProfileScreen(
                     torEnabled = torEnabled,
                     onionAddress = onionAddress,
                     onShowQr = { showMyQr = true },
-                    onCopyLink = { viewModel.getMyContactUri() }
+                    onCopyLink = copyLink
                 )
 
                 Spacer(modifier = Modifier.height(32.dp))
@@ -231,24 +239,30 @@ fun ProfileScreen(
         )
     }
 
+    // Запрос в ядро — один раз при открытии диалога, а не на каждой перерисовке.
+    LaunchedEffect(showMyQr) {
+        if (showMyQr) viewModel.getMyContactUri()
+    }
+
     if (showMyQr) {
-        viewModel.getMyContactUri()
-        
         AlertDialog(
             onDismissRequest = { showMyQr = false },
             title = { Text(Strings.MY_QR_CODE) },
             text = {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    if (myContactUri != null) {
-                        val qrCode = QRCode(myContactUri!!).render().nativeImage() as java.awt.image.BufferedImage
+                    val uri = myContactUri
+                    if (uri != null) {
+                        val qrBitmap = remember(uri) {
+                            (QRCode(uri).render().nativeImage() as java.awt.image.BufferedImage).toComposeImageBitmap()
+                        }
                         Image(
-                            bitmap = qrCode.toComposeImageBitmap(),
+                            bitmap = qrBitmap,
                             contentDescription = Strings.MY_QR_CODE,
                             modifier = Modifier.size(200.dp)
                         )
                         Spacer(modifier = Modifier.height(16.dp))
                         Text(
-                            text = myContactUri!!,
+                            text = uri,
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.outline
                         )
@@ -270,10 +284,6 @@ fun ProfileScreen(
                 }
             }
         )
-    }
-
-    LaunchedEffect(myContactUri) {
-        myContactUri?.let { ClipboardUtils.copyToClipboard(it) }
     }
 }
 

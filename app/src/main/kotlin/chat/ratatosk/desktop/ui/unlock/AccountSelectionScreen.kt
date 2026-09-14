@@ -18,6 +18,7 @@ import androidx.compose.ui.unit.dp
 import chat.ratatosk.desktop.ui.AccountItem
 import chat.ratatosk.desktop.ui.RatatoskViewModel
 import chat.ratatosk.desktop.ui.Strings
+import chat.ratatosk.desktop.ui.components.SecretTextField
 import kotlinx.coroutines.launch
 import org.ratatosk.core.FfiAccount
 
@@ -124,12 +125,12 @@ fun AccountSelectionScreen(viewModel: RatatoskViewModel) {
                 Column {
                     Text(Strings.HIDDEN_PIN_DESC)
                     Spacer(modifier = Modifier.height(8.dp))
-                    OutlinedTextField(
+                    SecretTextField(
                         value = hiddenPin,
                         onValueChange = { hiddenPin = it },
-                        label = { Text("PIN") },
+                        label = "PIN",
                         modifier = Modifier.fillMaxWidth(),
-                        singleLine = true
+                        enabled = !isFindingHidden
                     )
                 }
             },
