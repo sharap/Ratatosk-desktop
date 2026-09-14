@@ -1,0 +1,82 @@
+package chat.ratatosk.desktop.model
+
+import chat.ratatosk.desktop.util.ImageUtils
+import org.ratatosk.core.FfiAnomalies
+import org.ratatosk.core.FfiCompanionAttachment
+import org.ratatosk.core.FfiCompanionChat
+import org.ratatosk.core.FfiCompanionMessage
+import org.ratatosk.core.FfiContact
+import org.ratatosk.core.FfiFile
+import org.ratatosk.core.FfiMessage
+import org.ratatosk.core.FfiReachability
+import org.ratatosk.core.FfiReaction
+import org.ratatosk.core.maxPreviewBytes
+import java.io.File
+
+// Перевод того, что компаньон получает от телефона, в типы, которые рисуют
+// экраны. Экраны пока знают только типы полного клиента.
+
+internal fun mapCompanionChat(chat: FfiCompanionChat): FfiContact {
+    return FfiContact(
+        peerIk = chat.chatId,
+        chatId = chat.chatId,
+        fingerprint = "",
+        displayName = chat.title,
+        localName = null,
+        verified = chat.verified,
+        seenOnLan = false,
+        hasAvatar = false,
+        onion = null,
+        chatmail = null,
+        cardVersion = 0UL,
+        addedMs = 0UL,
+        reachability = FfiReachability(emptyList(), null, null),
+        directChannel = null,
+        anomalies = FfiAnomalies(0UL, 0UL, 0UL, 0UL, 0UL),
+        ygg = null,
+        nostrRelays = emptyList()
+    )
+}
+
+internal fun mapCompanionMessage(msg: FfiCompanionMessage, fingerprint: String?): FfiMessage {
+    return FfiMessage(
+        msgId = msg.msgId,
+        body = msg.body,
+        mine = msg.mine,
+        wallMs = msg.wallMs,
+        status = msg.status,
+        editedAtMs = msg.editedAtMs,
+        forwarded = msg.forwarded,
+        reactions = msg.reactions.map { FfiReaction(it.emoji, if (it.mine) fingerprint?.hexToByteArray() ?: ByteArray(0) else ByteArray(0), it.mine) },
+        files = msg.files.map { mapCompanionAttachment(it, msg.mine) },
+        replyTo = msg.replyTo,
+        sharedContact = null,
+        // Сопоставление подписи автора с участником группы — этап 3.
+        author = msg.author,
+        authorIk = null
+    )
+}
+
+internal fun mapCompanionAttachment(att: FfiCompanionAttachment, mine: Boolean): FfiFile {
+    return FfiFile(
+        fileId = att.fileId,
+        name = att.name,
+        sizeBytes = att.sizeBytes,
+        incoming = !mine,
+        accepted = att.accepted,
+        complete = att.haveChunks == att.chunkTotal,
+        receivedChunks = att.haveChunks,
+        chunkTotal = att.chunkTotal,
+        hasPreview = att.hasPreview,
+        chunkBytes = 0u
+    )
+}
+
+/** Превью исходящей картинки в пределах, которые задаёт ядро; не картинка — `null`. */
+internal fun previewFor(file: File): ByteArray? {
+    if (file.extension.lowercase() !in listOf("jpg", "jpeg", "png", "webp", "gif", "bmp")) return null
+    val limit = try { maxPreviewBytes().toInt() } catch (e: Exception) { return null }
+    return ImageUtils.makePreview(file, limit)
+}
+
+private fun String.hexToByteArray() = chunked(2).map { it.toInt(16).toByte() }.toByteArray()
