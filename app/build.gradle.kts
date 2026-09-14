@@ -84,6 +84,7 @@ dependencies {
     implementation(libs.compose.components.resources)
 
     implementation(libs.jna)
+    implementation(libs.jna.platform)
     implementation(libs.coroutines.core)
     implementation(libs.coroutines.swing)
     implementation(libs.lifecycle.viewmodel)
@@ -115,4 +116,8 @@ compose.desktop {
             packageVersion = "1.0.0"
         }
     }
+}
+
+tasks.withType<Test>().configureEach {
+    providers.gradleProperty("ratatosk.test.keyring").orNull?.let { systemProperty("ratatosk.test.keyring", it) }
 }

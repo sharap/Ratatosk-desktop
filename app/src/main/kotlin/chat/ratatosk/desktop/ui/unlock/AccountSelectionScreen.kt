@@ -91,7 +91,7 @@ fun AccountSelectionScreen(viewModel: RatatoskViewModel) {
                                             Icon(Icons.Default.Delete, contentDescription = "Удалить сопряжение", tint = MaterialTheme.colorScheme.error)
                                         }
                                     },
-                                    modifier = Modifier.clickable { viewModel.initializeCompanion(item.pairing.inviteUri, item.pairing.useCache, item.pairing.deviceId) }
+                                    modifier = Modifier.clickable { viewModel.openCompanionPairing(item.pairing) }
                                 )
                             }
                         }
@@ -168,6 +168,7 @@ fun AccountSelectionScreen(viewModel: RatatoskViewModel) {
 
     if (showCompanionSetup) {
         chat.ratatosk.desktop.ui.onboarding.CompanionSetupDialog(
+            canRemember = viewModel.secretStoreAvailable.collectAsState().value == true,
             onDismiss = { showCompanionSetup = false },
             onLink = { uri, useCache ->
                 viewModel.initializeCompanion(uri, useCache)

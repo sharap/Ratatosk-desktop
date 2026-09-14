@@ -35,15 +35,6 @@ object RatatoskCore : EventObserver, CompanionObserver {
     private var activeAccountIdHex: String? = null
     private var isCompanionMode: Boolean = false
 
-    // Session credentials stored ONLY in RAM
-    private data class SessionCredentials(
-        val accountId: ByteArray,
-        val pin: String?,
-        val deviceKey: ByteArray?,
-        val displayName: String
-    )
-    private var sessionCredentials: SessionCredentials? = null
-
     private val _events = MutableSharedFlow<FfiEvent>(
         replay = 20, 
         extraBufferCapacity = 100,
@@ -93,9 +84,6 @@ object RatatoskCore : EventObserver, CompanionObserver {
                 
                 reg.setForeground(accountId)
                 
-                // Save credentials for auto-recovery (in-RAM only)
-                sessionCredentials = SessionCredentials(accountId, pin, deviceKey, displayName)
-                
                 client = newClient
             activeAccountIdHex = accountIdHex
             isCompanionMode = false
@@ -135,7 +123,6 @@ object RatatoskCore : EventObserver, CompanionObserver {
             companion?.destroy()
             companion = null
             activeAccountIdHex = null
-            sessionCredentials = null
             isCompanionMode = false
             // Повтор событий — для подписчика, пришедшего чуть позже открытия.
             // Следующему аккаунту события прошлого не нужны.
@@ -170,16 +157,6 @@ object RatatoskCore : EventObserver, CompanionObserver {
                 nativeError = t
                 throw t
             }
-        }
-    }
-
-    fun tryAutoInitialize(): RatatoskClient? {
-        val creds = sessionCredentials ?: return null
-        return try {
-            initialize(creds.accountId, creds.pin, creds.deviceKey, creds.displayName)
-        } catch (e: Exception) {
-            Log.w(TAG, "Auto-reinitialization failed", e)
-            null
         }
     }
 

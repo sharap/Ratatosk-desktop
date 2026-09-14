@@ -40,6 +40,28 @@ object FileUtils {
         return ratatoskDir
     }
 
+    /**
+     * Расширения, которые система по двойному щелчку **выполняет**, а не
+     * показывает. Список намеренно широкий: лишняя строка стоит человеку
+     * одного щелчка «показать в папке», пропущенная — чужого кода на машине.
+     */
+    private val EXECUTABLE_EXTENSIONS = setOf(
+        // Windows
+        "exe", "com", "scr", "pif", "bat", "cmd", "msi", "msix", "msp", "appx", "appxbundle",
+        "lnk", "url", "hta", "cpl", "msc", "reg", "inf", "scf", "vb", "vbs", "vbe", "js", "jse",
+        "ws", "wsf", "wsh", "ps1", "psm1", "application", "gadget", "chm", "iso", "img", "vhd", "vhdx",
+        // Linux и общее
+        "sh", "bash", "zsh", "csh", "ksh", "fish", "run", "bin", "desktop", "appimage", "deb", "rpm",
+        "snap", "flatpakref", "jar", "jnlp", "py", "pyw", "pl", "rb", "php",
+        // macOS
+        "app", "command", "tool", "pkg", "mpkg", "dmg", "workflow", "scpt", "terminal",
+    )
+
+    fun isExecutable(name: String): Boolean {
+        val ext = safeName(name).substringAfterLast('.', "").lowercase()
+        return ext in EXECUTABLE_EXTENSIONS
+    }
+
     private val WINDOWS_RESERVED = Regex("^(CON|PRN|AUX|NUL|COM[0-9]|LPT[0-9])(\\..*)?$", RegexOption.IGNORE_CASE)
     private val FORBIDDEN_CHARS = Regex("[<>:\"/\\\\|?*\\u0000-\\u001F]")
 

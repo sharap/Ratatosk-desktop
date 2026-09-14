@@ -42,6 +42,14 @@ class FileUtilsTest {
     }
 
     @Test
+    fun executablesAreRecognisedDespiteTricks() {
+        listOf("setup.exe", "SETUP.EXE", "run.sh", "x.desktop", "a.lnk", "b.jar", "c.exe.", "d.bat ", "../e.msi", "f.tar.gz.exe")
+            .forEach { assertTrue("not flagged: $it", FileUtils.isExecutable(it)) }
+        listOf("photo.jpg", "doc.pdf", "archive.zip", "notes.txt", "exe", "README", "movie.mp4")
+            .forEach { assertFalse("flagged: $it", FileUtils.isExecutable(it)) }
+    }
+
+    @Test
     fun uniqueFileDoesNotOverwrite() {
         val dir = Files.createTempDirectory("unique").toFile()
         try {

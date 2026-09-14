@@ -4,6 +4,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.datastore.preferences.core.*
 import chat.ratatosk.desktop.util.AppDirs
+import chat.ratatosk.desktop.util.SecretStore
 import chat.ratatosk.desktop.ui.theme.ChatThemeData
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
@@ -102,46 +103,94 @@ class SettingsRepository {
         }
     }
 
+    /**
+     * Сохранённое сопряжение с телефоном — **без ссылки**.
+     *
+     * Ссылка сопряжения и есть секрет: у кого она, тот второй экран этого
+     * телефона до отзыва (DESKTOP.md). Она лежит в [SecretStore], а здесь —
+     * только то, что можно показать в списке. [legacyInviteUri] — запись
+     * старого формата, которую не удалось перенести (хранилища ОС нет).
+     */
     data class CompanionPairing(
         val deviceId: String,
-        val inviteUri: String,
         val phoneName: String,
-        val useCache: Boolean
+        val useCache: Boolean,
+        val legacyInviteUri: String? = null,
     )
 
     val companionPairings: Flow<List<CompanionPairing>> = dataStore.data.map { preferences ->
-        val raw = preferences[Keys.COMPANION_PAIRINGS] ?: ""
-        if (raw.isEmpty()) emptyList()
-        else {
-            // Испорченная запись пропускается, а не роняет приложение на старте.
-            raw.split(";;").filter { it.isNotBlank() }.mapNotNull {
-                val parts = it.split("||")
-                if (parts.size != 4 || parts[0].isBlank() || parts[1].isBlank()) null
-                else CompanionPairing(parts[0], parts[1], parts[2], parts[3].toBoolean())
+        parsePairings(preferences[Keys.COMPANION_PAIRINGS] ?: "")
+    }
+
+    private fun parsePairings(raw: String): List<CompanionPairing> =
+        // Испорченная запись пропускается, а не роняет приложение на старте.
+        raw.split(";;").filter { it.isNotBlank() }.mapNotNull {
+            val parts = it.split("||")
+            when {
+                parts.isEmpty() || parts[0].isBlank() -> null
+                // Новый формат: deviceId||phoneName||useCache
+                parts.size == 3 -> CompanionPairing(parts[0], parts[1], parts[2].toBoolean())
+                // Старый: deviceId||inviteUri||phoneName||useCache
+                parts.size == 4 && parts[1].isNotBlank() ->
+                    CompanionPairing(parts[0], parts[2], parts[3].toBoolean(), legacyInviteUri = parts[1])
+                else -> null
             }
+        }
+
+    private fun encodePairing(pairing: CompanionPairing): String {
+        // Имя телефона задаёт его владелец: разделители формата из него убираем.
+        val phoneName = pairing.phoneName.replace("||", "|").replace(";;", ";")
+        return if (pairing.legacyInviteUri != null) {
+            "${pairing.deviceId}||${pairing.legacyInviteUri}||$phoneName||${pairing.useCache}"
+        } else {
+            "${pairing.deviceId}||$phoneName||${pairing.useCache}"
         }
     }
 
-    suspend fun saveCompanionPairing(pairing: CompanionPairing) {
+    private suspend fun updatePairings(transform: (List<CompanionPairing>) -> List<CompanionPairing>) {
         dataStore.edit { preferences ->
-            val current = preferences[Keys.COMPANION_PAIRINGS] ?: ""
-            val pairings = current.split(";;").filter { it.isNotBlank() }.toMutableList()
-            // Имя телефона задаёт его владелец: разделители формата из него убираем.
-            val phoneName = pairing.phoneName.replace("||", "|").replace(";;", ";")
-            val entry = "${pairing.deviceId}||${pairing.inviteUri}||$phoneName||${pairing.useCache}"
-            // Remove old if exists
-            pairings.removeAll { it.startsWith("${pairing.deviceId}||") }
-            pairings.add(entry)
-            preferences[Keys.COMPANION_PAIRINGS] = pairings.joinToString(";;")
+            val current = parsePairings(preferences[Keys.COMPANION_PAIRINGS] ?: "")
+            preferences[Keys.COMPANION_PAIRINGS] = transform(current).joinToString(";;") { encodePairing(it) }
         }
+    }
+
+    /** Запомнить сопряжение; ссылку вызывающий уже положил в [SecretStore]. */
+    suspend fun saveCompanionPairing(pairing: CompanionPairing) {
+        updatePairings { list -> list.filterNot { it.deviceId == pairing.deviceId } + pairing.copy(legacyInviteUri = null) }
     }
 
     suspend fun removeCompanionPairing(deviceId: String) {
-        dataStore.edit { preferences ->
-            val current = preferences[Keys.COMPANION_PAIRINGS] ?: ""
-            val pairings = current.split(";;").filter { it.isNotBlank() }.toMutableList()
-            pairings.removeAll { it.startsWith("$deviceId||") }
-            preferences[Keys.COMPANION_PAIRINGS] = pairings.joinToString(";;")
+        updatePairings { list -> list.filterNot { it.deviceId == deviceId } }
+    }
+
+    /**
+     * Переносит ссылки из записей старого формата в [SecretStore] и стирает
+     * их из файла настроек. Без хранилища записи остаются как были —
+     * иначе человек молча потерял бы сопряжение.
+     *
+     * @return сколько записей осталось в старом формате.
+     */
+    suspend fun migratePairingSecrets(store: SecretStore): Int {
+        var remaining = 0
+        updatePairings { list ->
+            list.map { pairing ->
+                val uri = pairing.legacyInviteUri ?: return@map pairing
+                if (store.isAvailable && store.put(SecretStore.PAIRING_PREFIX + pairing.deviceId, uri.toByteArray())) {
+                    pairing.copy(legacyInviteUri = null)
+                } else {
+                    remaining++
+                    pairing
+                }
+            }
         }
+        return remaining
+    }
+
+    /** Аккаунт открывается секретом устройства из [SecretStore]. */
+    fun isDeviceBound(accountId: String): Flow<Boolean> =
+        dataStore.data.map { it[booleanPreferencesKey(accountKey(accountId, "device_bound"))] ?: false }
+
+    suspend fun setDeviceBound(accountId: String, bound: Boolean) {
+        dataStore.edit { it[booleanPreferencesKey(accountKey(accountId, "device_bound"))] = bound }
     }
 }

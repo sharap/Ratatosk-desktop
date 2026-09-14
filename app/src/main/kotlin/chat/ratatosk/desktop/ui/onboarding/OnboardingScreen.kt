@@ -26,9 +26,16 @@ fun OnboardingScreen(viewModel: RatatoskViewModel) {
     
     var showCompanionSetup by remember { mutableStateOf(false) }
     var showNoPinWarning by remember { mutableStateOf(false) }
+    var bindToDevice by remember { mutableStateOf(false) }
+    val secretStoreAvailable by viewModel.secretStoreAvailable.collectAsState()
 
     val createIdentity = {
-        viewModel.initialize(label, pin.takeIf { it.isNotEmpty() }, displayName.takeIf { it.isNotEmpty() } ?: "User")
+        viewModel.initialize(
+            label,
+            pin.takeIf { it.isNotEmpty() },
+            displayName.takeIf { it.isNotEmpty() } ?: "User",
+            bindToDevice = bindToDevice && secretStoreAvailable == true
+        )
     }
 
     Column(
@@ -93,6 +100,25 @@ fun OnboardingScreen(viewModel: RatatoskViewModel) {
             modifier = Modifier.fillMaxWidth(0.8f)
         )
 
+        // Выбор на всю жизнь аккаунта: секрет устройства задаётся при создании.
+        if (secretStoreAvailable == true) {
+            Spacer(modifier = Modifier.height(8.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(0.8f),
+                verticalAlignment = Alignment.Top
+            ) {
+                Checkbox(checked = bindToDevice, onCheckedChange = { bindToDevice = it })
+                Column(modifier = Modifier.padding(top = 12.dp)) {
+                    Text(Strings.BIND_TO_DEVICE, style = MaterialTheme.typography.bodyMedium)
+                    Text(
+                        if (bindToDevice) Strings.BIND_TO_DEVICE_WARNING else Strings.BIND_TO_DEVICE_DESC,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = if (bindToDevice) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.outline
+                    )
+                }
+            }
+        }
+
         Spacer(modifier = Modifier.height(16.dp))
 
         Row(modifier = Modifier.fillMaxWidth(0.8f), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -107,7 +133,9 @@ fun OnboardingScreen(viewModel: RatatoskViewModel) {
             Button(
                 // Без PIN ключ базы лежит в ней открыто, и ядро требует сказать
                 // об этом до создания (FFI.md, §8.6), а не после.
-                onClick = { if (pin.isEmpty()) showNoPinWarning = true else createIdentity() },
+                // С секретом устройства и без PIN база защищена машиной — это
+                // законное сочетание, предупреждать не о чем.
+                onClick = { if (pin.isEmpty() && !(bindToDevice && secretStoreAvailable == true)) showNoPinWarning = true else createIdentity() },
                 modifier = Modifier.weight(1f),
                 enabled = displayName.isNotBlank() && label.isNotBlank()
             ) {
@@ -177,6 +205,7 @@ fun OnboardingScreen(viewModel: RatatoskViewModel) {
 
     if (showCompanionSetup) {
         CompanionSetupDialog(
+            canRemember = secretStoreAvailable == true,
             onDismiss = { showCompanionSetup = false },
             onLink = { uri, useCache ->
                 viewModel.initializeCompanion(uri, useCache)
@@ -189,11 +218,12 @@ fun OnboardingScreen(viewModel: RatatoskViewModel) {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CompanionSetupDialog(
+    canRemember: Boolean,
     onDismiss: () -> Unit,
     onLink: (String, Boolean) -> Unit
 ) {
     var uri by remember { mutableStateOf("") }
-    var useCache by remember { mutableStateOf(true) }
+    var useCache by remember(canRemember) { mutableStateOf(canRemember) }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -211,8 +241,16 @@ fun CompanionSetupDialog(
                 )
                 Spacer(Modifier.height(8.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Checkbox(checked = useCache, onCheckedChange = { useCache = it })
+                    Checkbox(checked = useCache, onCheckedChange = { useCache = it }, enabled = canRemember)
                     Text(Strings.COMPANION_CACHE_DESC, style = MaterialTheme.typography.bodySmall)
+                }
+                if (!canRemember) {
+                    // Ссылка — секрет сопряжения; без хранилища ОС её не запоминаем.
+                    Text(
+                        Strings.COMPANION_NOT_REMEMBERED,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error
+                    )
                 }
             }
         },

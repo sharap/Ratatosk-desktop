@@ -7,6 +7,7 @@ import chat.ratatosk.desktop.util.AppDirs
 import chat.ratatosk.desktop.util.FileUtils
 import chat.ratatosk.desktop.util.ImageUtils
 import chat.ratatosk.desktop.util.Log
+import chat.ratatosk.desktop.util.SecretStore
 import chat.ratatosk.desktop.util.toHexString
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
@@ -78,6 +79,10 @@ class RatatoskViewModel(
 
     private val _isSearching = MutableStateFlow(false)
     val isSearching = _isSearching.asStateFlow()
+
+    /** Есть ли системное хранилище секретов; `null` — ещё проверяем. */
+    private val _secretStoreAvailable = MutableStateFlow<Boolean?>(null)
+    val secretStoreAvailable = _secretStoreAvailable.asStateFlow()
 
     private val _isFindingHidden = MutableStateFlow(false)
     val isFindingHidden = _isFindingHidden.asStateFlow()
@@ -195,6 +200,14 @@ class RatatoskViewModel(
         // Копии вложений от прошлого запуска, если он завершился не выходом.
         viewModelScope.launch(Dispatchers.IO) { AppDirs.clearMediaCache() }
 
+        // Хранилище секретов может спросить пароль связки ключей — не на UI-потоке.
+        viewModelScope.launch(Dispatchers.IO) {
+            val store = SecretStore.system
+            _secretStoreAvailable.value = store.isAvailable
+            val remaining = settingsRepository.migratePairingSecrets(store)
+            if (remaining > 0) Log.w(TAG, "$remaining companion pairing(s) kept in settings: no secret store")
+        }
+
         viewModelScope.launch {
             try {
                 RatatoskCore.initializeRegistry()
@@ -227,15 +240,6 @@ class RatatoskViewModel(
                 setupCompanion()
             } else {
                 setupEngine()
-            }
-        } else {
-            viewModelScope.launch {
-                RatatoskCore.tryAutoInitialize()?.let {
-                    _isInitialized.value = true
-                    _isCompanionMode.value = RatatoskCore.isCompanionMode()
-                    _activeAccountId.value = RatatoskCore.getActiveAccountId()
-                    setupEngine()
-                }
             }
         }
         
@@ -392,12 +396,32 @@ class RatatoskViewModel(
         }
     }
 
-    fun initialize(label: String, pin: String?, displayName: String) {
+    /**
+     * Заводит аккаунт и открывает его.
+     *
+     * [bindToDevice] — открывать базу ещё и секретом устройства: 32 случайных
+     * байта в хранилище ОС. Файл базы без этой машины тогда не открывается
+     * ни с PIN, ни без; но и потеря хранилища (переустановка системы, сброс
+     * связки ключей) — потеря переписки (FFI.md, «Чем открывается база»).
+     * Выбирается один раз, при создании.
+     */
+    fun initialize(label: String, pin: String?, displayName: String, bindToDevice: Boolean = false) {
         viewModelScope.launch(Dispatchers.IO) {
             try {
                 val account = RatatoskCore.createAccount(label)
-                RatatoskCore.initialize(account.id, pin, null, displayName)
                 val idHex = account.id.toHexString()
+                val deviceKey = if (bindToDevice) {
+                    val secret = ByteArray(32).also { java.security.SecureRandom().nextBytes(it) }
+                    val store = SecretStore.system
+                    // Сначала сохранить, потом открыть: база, заведённая ключом,
+                    // который не удалось записать, не откроется больше никогда.
+                    if (!store.isAvailable || !store.put(SecretStore.DEVICE_KEY_PREFIX + idHex, secret)) {
+                        throw IllegalStateException("System secret store is unavailable")
+                    }
+                    settingsRepository.setDeviceBound(idHex, true)
+                    secret
+                } else null
+                RatatoskCore.initialize(account.id, pin, deviceKey, displayName)
                 settingsRepository.registerAccount(idHex, displayName)
                 withContext(Dispatchers.Main) {
                     _isInitialized.value = true
@@ -417,7 +441,13 @@ class RatatoskViewModel(
             try {
                 val idHex = account.id.toHexString()
                 val savedName = settingsRepository.getDisplayName(idHex).firstOrNull() ?: account.label
-                RatatoskCore.initialize(account.id, pin, null, savedName)
+                val deviceKey = if (settingsRepository.isDeviceBound(idHex).first()) {
+                    SecretStore.system.get(SecretStore.DEVICE_KEY_PREFIX + idHex)
+                        ?: throw IllegalStateException(
+                            "This account is bound to this computer, but its secret is not available in the system secret store"
+                        )
+                } else null
+                RatatoskCore.initialize(account.id, pin, deviceKey, savedName)
                 withContext(Dispatchers.Main) {
                     _isInitialized.value = true
                     _activeAccountId.value = idHex
@@ -531,6 +561,19 @@ class RatatoskViewModel(
         }
     }
 
+    /** Открыть сохранённое сопряжение: ссылка — из хранилища секретов. */
+    fun openCompanionPairing(pairing: SettingsRepository.CompanionPairing) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val uri = pairing.legacyInviteUri
+                ?: SecretStore.system.get(SecretStore.PAIRING_PREFIX + pairing.deviceId)?.toString(Charsets.UTF_8)
+            if (uri == null) {
+                _error.value = "Pairing link is not available in the system secret store"
+                return@launch
+            }
+            initializeCompanion(uri, pairing.useCache, pairing.deviceId)
+        }
+    }
+
     fun initializeCompanion(uri: String, useCache: Boolean, deviceId: String? = null) {
         viewModelScope.launch(Dispatchers.IO) {
             try {
@@ -547,13 +590,17 @@ class RatatoskViewModel(
                 val actualDeviceId = companion.deviceId().toHexString()
                 val phoneName = companion.phoneName()
                 
-                if (useCache) {
+                // Запомнить сопряжение можно только вместе со ссылкой, а ссылке
+                // место в хранилище ОС. Без него — не запоминаем вовсе (и кэш не
+                // пишем: без ссылки открыть его в следующий раз будет нечем).
+                val store = SecretStore.system
+                if (useCache && store.isAvailable && store.put(SecretStore.PAIRING_PREFIX + actualDeviceId, uri.toByteArray())) {
                     val finalCachePath = File(baseDir, "$actualDeviceId.db").absolutePath
                     if (initialCachePath == null) {
                         companion.setCachePath(finalCachePath)
                     }
                     settingsRepository.saveCompanionPairing(
-                        SettingsRepository.CompanionPairing(actualDeviceId, uri, phoneName, true)
+                        SettingsRepository.CompanionPairing(actualDeviceId, phoneName, true)
                     )
                 }
                 
@@ -686,8 +733,9 @@ class RatatoskViewModel(
     }
 
     fun removeCompanionPairing(deviceId: String) {
-        viewModelScope.launch {
+        viewModelScope.launch(Dispatchers.IO) {
             settingsRepository.removeCompanionPairing(deviceId)
+            SecretStore.system.delete(SecretStore.PAIRING_PREFIX + deviceId)
         }
     }
 
@@ -881,7 +929,18 @@ class RatatoskViewModel(
         saveFile(file, destination) { onComplete(it.absolutePath) }
     }
 
+    /**
+     * Открывает вложение системным приложением.
+     *
+     * Исполняемое (по расширению) не открывается никогда: файл от собеседника,
+     * запущенный двойным щелчком, — это чужой код на этой машине. Такое
+     * сохраняется в загрузки и показывается в папке, решать — человеку.
+     */
     fun openFile(file: FfiFile) {
+        if (FileUtils.isExecutable(file.name)) {
+            downloadFile(file) { path -> FileUtils.openDirectory(File(path)) }
+            return
+        }
         val destination = File(AppDirs.getMediaCacheDir(), "${file.fileId.toHexString()}_${FileUtils.safeName(file.name)}")
 
         if (destination.exists() && destination.length() == file.sizeBytes.toLong()) {
