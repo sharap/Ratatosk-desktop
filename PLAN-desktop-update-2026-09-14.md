@@ -110,6 +110,10 @@ Android-эталон — полный узел.
 
 * Аналог A `RatatoskCore.startLoggingIfDebug()` (A `core/RatatoskCore.kt:77-109`):
   `enableLogging(LOG_FILTER)` только при `-Dratatosk.debug=true` / `RATATOSK_DEBUG=1`.
+* **Отложено (14.09):** вне Android `enableLogging` в ядре — пустышка («там этот крейт
+  линкуется в стенд, у которого подписчик свой», `crates/ffi/src/lib.rs:3973`). Журнал ядра
+  на десктопе требует правки ядра (подписчик `tracing` в stderr/файл вне Android) — только
+  с разрешения автора ядра.
 
 **Готово, когда:** `./gradlew :app:run` на чистом клоне собирает ядро, генерирует биндинги,
 запускается; правка любого `.kt` не пересобирает Rust; `packageDeb`/`packageMsi` дают
