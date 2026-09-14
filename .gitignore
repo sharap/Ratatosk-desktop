@@ -1,0 +1,25 @@
+*.iml
+.gradle
+.kotlin
+/local.properties
+local.properties
+/.idea/caches
+/.idea/libraries
+/.idea/modules.xml
+/.idea/workspace.xml
+/.idea/navEditor.xml
+/.idea/assetWizardSettings.xml
+.DS_Store
+/build
+/captures
+.externalNativeBuild
+.cxx
+
+# Артефакты сборки и логи
+/dist
+*.log
+
+# Нативная библиотека ядра — собирается из ratatosk-core, в репозиторий не кладём
+*.so
+*.dll
+*.dylib
