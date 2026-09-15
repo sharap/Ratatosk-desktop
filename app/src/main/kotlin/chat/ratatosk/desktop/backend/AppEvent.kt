@@ -70,6 +70,10 @@ sealed interface AppEvent {
     // --- Вложения ---------------------------------------------------------
     data class FileProgress(val fileId: ByteArray, val fraction: Float) : AppEvent
     data class PreviewLoaded(val fileId: ByteArray, val bytes: ByteArray?) : AppEvent
+    /** Исходящее вложение: какая доля отдана собеседнику. */
+    data class FileSending(val fileId: ByteArray, val fraction: Float) : AppEvent
+    /** Передача вложения стоит; [text] — слова ядра о причине (FFI.md, §10.3). `null` — снова идёт. */
+    data class FileWaiting(val fileId: ByteArray, val text: String?) : AppEvent
 
     // --- Только полный клиент: сопряжение второго экрана (§13.4) ----------
     /** Ссылка сопряжения — показать сразу: второго показа не будет. */

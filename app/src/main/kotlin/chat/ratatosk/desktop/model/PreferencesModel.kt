@@ -19,6 +19,9 @@ interface PreferencesApi {
     /** Вести журнал ядра в файл; действует со следующего запуска. */
     val coreLogEnabled: StateFlow<Boolean>
     fun setCoreLogEnabled(enabled: Boolean)
+    /** Отправка по Ctrl+Enter (Enter — новая строка); по умолчанию — по Enter. */
+    val sendWithCtrlEnter: StateFlow<Boolean>
+    fun setSendWithCtrlEnter(value: Boolean)
 }
 
 /** Тема и уведомления: только настройки приложения, ядро не участвует. */
@@ -66,6 +69,13 @@ class PreferencesModel(session: SessionContext) : FeatureModel(session), Prefere
 
     override fun setCoreLogEnabled(enabled: Boolean) {
         scope.launch { settings.setCoreLogEnabled(enabled) }
+    }
+
+    override val sendWithCtrlEnter = settings.sendWithCtrlEnter
+        .stateIn(scope, SharingStarted.Eagerly, false)
+
+    override fun setSendWithCtrlEnter(value: Boolean) {
+        scope.launch { settings.setSendWithCtrlEnter(value) }
     }
 
     override fun reset() {}

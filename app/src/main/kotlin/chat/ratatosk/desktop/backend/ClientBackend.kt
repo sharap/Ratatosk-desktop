@@ -85,6 +85,13 @@ class ClientBackend(val client: RatatoskClient) : Backend {
                 val fraction = if (event.total > 0UL) event.received.toFloat() / event.total.toFloat() else 0f
                 emit(AppEvent.FileProgress(event.fileId, fraction))
             }
+            is FfiEvent.FileSending -> {
+                val fraction = if (event.total > 0UL) event.sent.toFloat() / event.total.toFloat() else 0f
+                emit(AppEvent.FileSending(event.fileId, fraction))
+            }
+            is FfiEvent.FileWaitsForChannel -> emit(
+                AppEvent.FileWaiting(event.fileId, runCatching { org.ratatosk.core.fileWaitingText(event.reason) }.getOrNull())
+            )
             is FfiEvent.TorStatus -> emit(AppEvent.TorStatus(event.fraction, event.note, event.blocked))
             is FfiEvent.MailAccountReady -> emit(AppEvent.MailAccountReady(event.address))
             is FfiEvent.MailAccountFailed -> emit(AppEvent.MailAccountFailed(event.reason))

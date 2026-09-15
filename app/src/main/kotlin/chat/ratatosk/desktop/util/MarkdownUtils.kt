@@ -2,6 +2,9 @@ package chat.ratatosk.desktop.util
 
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.LinkAnnotation
+import androidx.compose.ui.text.TextLinkStyles
+import androidx.compose.ui.text.withLink
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontFamily
@@ -75,6 +78,11 @@ object MarkdownUtils {
         override fun visit(image: Image) { visitChildren(image) }
     }
 
+    private val SAFE_SCHEMES = setOf("http", "https", "mailto")
+
+    fun isSafeLink(destination: String): Boolean =
+        destination.substringBefore(':', "").lowercase() in SAFE_SCHEMES
+
     private class ComposeAnnotatedStringVisitor(
         private val builder: AnnotatedString.Builder,
         private val linkColor: Color
@@ -146,10 +154,16 @@ object MarkdownUtils {
         }
 
         override fun visit(link: Link) {
-            builder.withStyle(SpanStyle(color = linkColor, textDecoration = TextDecoration.Underline)) {
-                builder.pushStringAnnotation(tag = "URL", annotation = link.destination)
-                visitChildren(link)
-                builder.pop()
+            val style = SpanStyle(color = linkColor, textDecoration = TextDecoration.Underline)
+            // Ссылку прислал собеседник: открываем только веб и почту. `file:`
+            // или нестандартная схема открылась бы системным приложением —
+            // это уже не ссылка, а запуск чего-то на этой машине.
+            if (isSafeLink(link.destination)) {
+                builder.withLink(LinkAnnotation.Url(link.destination, TextLinkStyles(style))) {
+                    visitChildren(link)
+                }
+            } else {
+                builder.withStyle(style) { visitChildren(link) }
             }
         }
 

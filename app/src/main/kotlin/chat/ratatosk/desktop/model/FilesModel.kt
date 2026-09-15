@@ -29,6 +29,10 @@ interface FilesApi {
     val fileProgress: StateFlow<Map<String, Float>>
     val filePreviews: StateFlow<Map<String, ByteArray>>
     val activeJobsFlow: StateFlow<Set<String>>
+    /** Исходящие: доля, отданная собеседнику, по `fileId` в hex. */
+    val fileSending: StateFlow<Map<String, Float>>
+    /** Стоящие передачи: слова ядра о причине, по `fileId` в hex. */
+    val fileWaiting: StateFlow<Map<String, String>>
     val autoAcceptLimit: StateFlow<ULong?>
     val downloadDirPath: StateFlow<String?>
     fun acceptFile(chatId: ByteArray, fileId: ByteArray)
@@ -58,6 +62,12 @@ class FilesModel(session: SessionContext) : FeatureModel(session), FilesApi {
     private val activeJobs = ConcurrentHashMap<String, Job>()
     private val _activeJobsFlow = MutableStateFlow<Set<String>>(emptySet())
     override val activeJobsFlow = _activeJobsFlow.asStateFlow()
+
+    private val _fileSending = MutableStateFlow<Map<String, Float>>(emptyMap())
+    override val fileSending = _fileSending.asStateFlow()
+
+    private val _fileWaiting = MutableStateFlow<Map<String, String>>(emptyMap())
+    override val fileWaiting = _fileWaiting.asStateFlow()
 
     private val _autoAcceptLimit = MutableStateFlow<ULong?>(null)
     override val autoAcceptLimit = _autoAcceptLimit.asStateFlow()
@@ -200,6 +210,16 @@ class FilesModel(session: SessionContext) : FeatureModel(session), FilesApi {
             is AppEvent.FileProgress -> {
                 _fileProgress.update { it + (event.fileId.toHexString() to event.fraction) }
             }
+            is AppEvent.FileSending -> {
+                val hex = event.fileId.toHexString()
+                _fileSending.update { it + (hex to event.fraction) }
+                _fileWaiting.update { it - hex }
+            }
+            is AppEvent.FileWaiting -> {
+                val hex = event.fileId.toHexString()
+                val text = event.text
+                _fileWaiting.update { if (text != null) it + (hex to text) else it - hex }
+            }
             is AppEvent.PreviewLoaded -> {
                 val hex = event.fileId.toHexString()
                 val bytes = event.bytes
@@ -214,6 +234,8 @@ class FilesModel(session: SessionContext) : FeatureModel(session), FilesApi {
         activeJobs.clear()
         previewRequests.clear()
         _fileProgress.value = emptyMap()
+        _fileSending.value = emptyMap()
+        _fileWaiting.value = emptyMap()
         _filePreviews.value = emptyMap()
         _activeJobsFlow.value = emptySet()
         _autoAcceptLimit.value = null

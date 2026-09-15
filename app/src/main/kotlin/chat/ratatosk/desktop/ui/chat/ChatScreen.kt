@@ -1,54 +1,62 @@
 package chat.ratatosk.desktop.ui.chat
 
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.draganddrop.dragAndDropTarget
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.*
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draganddrop.DragAndDropEvent
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draganddrop.DragAndDropTarget
+import androidx.compose.ui.draganddrop.awtTransferable
+import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.key.*
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalClipboardManager
-import androidx.compose.ui.platform.LocalUriHandler
-import androidx.compose.ui.text.AnnotatedString
-import androidx.compose.ui.text.TextLayoutResult
+import androidx.compose.ui.text.input.TextFieldValue
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import kotlinx.coroutines.launch
-import androidx.compose.ui.text.SpanStyle
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.buildAnnotatedString
-import androidx.compose.foundation.relocation.BringIntoViewRequester
-import androidx.compose.foundation.relocation.bringIntoViewRequester
-import androidx.compose.ui.geometry.Rect
-import androidx.compose.ui.graphics.luminance
-import androidx.compose.ui.text.withStyle
+import chat.ratatosk.desktop.model.ChatMessage
+import chat.ratatosk.desktop.model.buildChatMessages
 import chat.ratatosk.desktop.ui.RatatoskViewModel
 import chat.ratatosk.desktop.ui.Strings
 import chat.ratatosk.desktop.ui.components.Avatar
 import chat.ratatosk.desktop.util.ClipboardUtils
-import chat.ratatosk.desktop.util.MarkdownUtils
 import chat.ratatosk.desktop.util.FilePicker
+import chat.ratatosk.desktop.util.FileUtils
+import chat.ratatosk.desktop.util.MessagePreview
+import chat.ratatosk.desktop.util.toHexString
 import coil3.compose.rememberAsyncImagePainter
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.launch
 import org.ratatosk.core.FfiDeliveryStatus
 import org.ratatosk.core.FfiMessage
-import org.ratatosk.core.FfiFile
-import org.ratatosk.core.FfiSharedContact
+import java.awt.datatransfer.DataFlavor
+import java.io.File
 
-@OptIn(ExperimentalMaterial3Api::class, androidx.compose.foundation.ExperimentalFoundationApi::class)
+/**
+ * Экран переписки. Состояние, которое должно пережить прокрутку (раскрытые
+ * длинные сообщения и спойлеры), держит экран, а не пузырь: пузырь в ленте
+ * пропадает, как только уходит с экрана (ревью Android 5.19).
+ */
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class, ExperimentalComposeUiApi::class)
 @Composable
 fun ChatScreen(
     viewModel: RatatoskViewModel,
@@ -56,830 +64,517 @@ fun ChatScreen(
     onBack: () -> Unit,
     onHeaderClick: () -> Unit,
     showBackButton: Boolean = true,
-    isCompact: Boolean = false
+    isCompact: Boolean = false,
 ) {
-    var text by remember { mutableStateOf("") }
-    var editingMessage by remember { mutableStateOf<FfiMessage?>(null) }
-    var replyingTo by remember { mutableStateOf<FfiMessage?>(null) }
-    var showForwardDialog by remember { mutableStateOf<List<ByteArray>?>(null) }
-    var selectedFiles by remember { mutableStateOf<List<java.io.File>>(emptyList()) }
-    
-    val chatTheme by viewModel.chatTheme.collectAsState()
-    val allMessages by viewModel.messages.collectAsState()
-    val messageStatuses by viewModel.messageStatuses.collectAsState()
-    val contacts by viewModel.contacts.collectAsState()
-    val contactAvatars by viewModel.contactAvatars.collectAsState()
-    
-    val chatIdHex = remember(chatId) { chatId.toHexString() }
-    val messages = allMessages[chatIdHex] ?: emptyList()
-    val listState = rememberLazyListState()
+    val chatHex = remember(chatId) { chatId.toHexString() }
     val scope = rememberCoroutineScope()
+    val snackbar = remember { SnackbarHostState() }
+    val listState = rememberLazyListState()
+    val composerFocus = remember { FocusRequester() }
 
-    val contact = remember(contacts, chatIdHex) {
-        contacts.find { it.chatId.toHexString() == chatIdHex }
-    }
+    // --- Данные -----------------------------------------------------------
+    val allMessages by viewModel.messages.collectAsState()
+    val statuses by viewModel.messageStatuses.collectAsState()
+    val contacts by viewModel.contacts.collectAsState()
     val groups by viewModel.groups.collectAsState()
+    val allMembers by viewModel.groupMembers.collectAsState()
+    val contactAvatars by viewModel.contactAvatars.collectAsState()
     val groupAvatars by viewModel.groupAvatars.collectAsState()
-    val group = remember(groups, chatIdHex) {
-        groups.find { it.chatId.toHexString() == chatIdHex }
+    val repliedMessages by viewModel.repliedMessages.collectAsState()
+    val chatTheme by viewModel.chatTheme.collectAsState()
+    val sendWithCtrlEnter by viewModel.sendWithCtrlEnter.collectAsState()
+    val isCompanion by viewModel.isCompanionMode.collectAsState()
+    val companionLinked by viewModel.isCompanionLinked.collectAsState()
+    val notices = viewModel.chatNotices
+
+    val contact = contacts.firstOrNull { it.chatId.contentEquals(chatId) }
+    val group = groups.firstOrNull { it.chatId.contentEquals(chatId) }
+    val isGroup = group != null
+    val members = allMembers[chatHex]
+
+    val raw = allMessages[chatHex] ?: emptyList()
+    val chatMessages = remember(raw, statuses, contacts, members, isGroup) {
+        buildChatMessages(raw, statuses, isGroup, contacts, members)
     }
+    // Лента снизу вверх: нулевой элемент — самое новое сообщение.
+    val display = remember(chatMessages) { chatMessages.asReversed() }
+    // Корутинам — всегда свежий список: захваченный при запуске устаревает.
+    val currentDisplay by rememberUpdatedState(display)
 
-    val displayMessages = remember(messages) { messages.reversed() }
+    // --- Состояние экрана -------------------------------------------------
+    var text by remember { mutableStateOf(TextFieldValue("")) }
+    var replyTo by remember { mutableStateOf<FfiMessage?>(null) }
+    var editing by remember { mutableStateOf<FfiMessage?>(null) }
+    var attachments by remember { mutableStateOf<List<File>>(emptyList()) }
+    var searchOpen by remember { mutableStateOf(false) }
+    var query by remember { mutableStateOf("") }
+    var highlightKey by remember { mutableStateOf<String?>(null) }
+    var expanded by remember { mutableStateOf(setOf<String>()) }
+    var revealed by remember { mutableStateOf(mapOf<String, Set<Int>>()) }
+    var dragging by remember { mutableStateOf(false) }
+    var forwardIds by remember { mutableStateOf<List<ByteArray>?>(null) }
+    var confirmDelete by remember { mutableStateOf<FfiMessage?>(null) }
+    var confirmRetract by remember { mutableStateOf<FfiMessage?>(null) }
+    var confirmClear by remember { mutableStateOf(false) }
+    var menuOpen by remember { mutableStateOf(false) }
 
-    var showChatMenu by remember { mutableStateOf(false) }
-    var showClearChatDialog by remember { mutableStateOf(false) }
-    var isSearching by remember { mutableStateOf(false) }
-    var searchQuery by remember { mutableStateOf("") }
-
-    LaunchedEffect(chatIdHex) {
+    LaunchedEffect(chatHex) {
         viewModel.loadMessages(chatId)
+        if (isGroup) viewModel.loadMembers(chatId)
+        runCatching { composerFocus.requestFocus() }
+    }
+    LaunchedEffect(query, searchOpen) {
+        if (searchOpen) viewModel.searchMessages(chatId, query) else viewModel.clearSearch()
     }
 
-    LaunchedEffect(searchQuery) {
-        viewModel.searchMessages(chatId, searchQuery)
+    // «Прочитано» — когда последнее входящее видно, окно в фокусе и чат открыт.
+    LaunchedEffect(chatHex, display) {
+        val newestIncoming = display.firstOrNull { !it.raw.mine } ?: return@LaunchedEffect
+        combine(
+            snapshotFlow { listState.layoutInfo.visibleItemsInfo.any { it.key == newestIncoming.key } },
+            viewModel.isWindowFocused,
+        ) { visible, focused -> visible && focused }
+            .distinctUntilChanged()
+            .collectLatest { if (it) viewModel.markReadUpTo(chatId, newestIncoming.msgId) }
+    }
+
+    // Догрузка истории — когда долистали до самого старого.
+    LaunchedEffect(chatHex) {
+        snapshotFlow {
+            val last = listState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0
+            last >= listState.layoutInfo.totalItemsCount - 3
+        }.distinctUntilChanged().collectLatest { atTop ->
+            if (atTop && currentDisplay.isNotEmpty() && !viewModel.isHistoryComplete(chatId)) viewModel.loadOlder(chatId)
+        }
+    }
+
+    // Своё новое сообщение — показать, даже если листали историю.
+    val newestKey = display.firstOrNull()?.key
+    LaunchedEffect(newestKey) {
+        if (currentDisplay.firstOrNull()?.raw?.mine == true) listState.animateScrollToItem(0)
+    }
+
+    fun jumpTo(msgId: ByteArray) {
+        scope.launch {
+            searchOpen = false
+            query = ""
+            if (viewModel.ensureMessageLoaded(chatId, msgId)) {
+                delay(50)
+                val index = currentDisplay.indexOfFirst { it.msgId.contentEquals(msgId) }
+                if (index >= 0) {
+                    listState.animateScrollToItem(index)
+                    highlightKey = msgId.toHexString()
+                    delay(2000)
+                    highlightKey = null
+                }
+            } else {
+                snackbar.showSnackbar(Strings.CHAT_NOT_FOUND)
+            }
+        }
+    }
+
+    fun authorName(msg: FfiMessage): String = when {
+        msg.mine -> Strings.CHAT_YOU
+        else -> chatMessages.firstOrNull { it.msgId.contentEquals(msg.msgId) }?.author?.name
+            ?: msg.author
+            ?: contact?.let { it.localName ?: it.displayName }
+            ?: Strings.CHAT_UNKNOWN_AUTHOR
+    }
+
+    fun send() {
+        val body = text.text
+        val edit = editing
+        val reply = replyTo
+        when {
+            // Вложения первыми: правка с вложениями их молча теряла бы.
+            attachments.isNotEmpty() -> {
+                viewModel.sendFiles(chatId, attachments, body)
+                attachments = emptyList()
+            }
+            edit != null -> if (body.isNotBlank()) viewModel.editMessage(chatId, edit.msgId, body)
+            reply != null -> viewModel.reply(chatId, reply.msgId, body)
+            body.isNotBlank() -> viewModel.sendText(chatId, body)
+        }
+        text = TextFieldValue("")
+        editing = null
+        replyTo = null
+    }
+
+    fun canEdit(msg: FfiMessage) = msg.mine && msg.body.isNotBlank() && msg.files.isEmpty() &&
+        System.currentTimeMillis() - msg.wallMs.toLong() < notices.maxEditAgeMs
+
+    fun startEdit(msg: FfiMessage) {
+        editing = msg
+        replyTo = null
+        text = TextFieldValue(msg.body, androidx.compose.ui.text.TextRange(msg.body.length))
+        runCatching { composerFocus.requestFocus() }
+    }
+
+    val dropTarget = remember {
+        object : DragAndDropTarget {
+            override fun onEntered(event: DragAndDropEvent) { dragging = true }
+            override fun onExited(event: DragAndDropEvent) { dragging = false }
+            override fun onEnded(event: DragAndDropEvent) { dragging = false }
+            override fun onDrop(event: DragAndDropEvent): Boolean {
+                dragging = false
+                val transferable = event.awtTransferable
+                if (!transferable.isDataFlavorSupported(DataFlavor.javaFileListFlavor)) return false
+                val files = (transferable.getTransferData(DataFlavor.javaFileListFlavor) as? List<*>)
+                    ?.filterIsInstance<File>()?.filter { it.isFile }.orEmpty()
+                if (files.isEmpty()) return false
+                attachments = (attachments + files).distinct()
+                return true
+            }
+        }
     }
 
     Scaffold(
-        topBar = { 
+        modifier = Modifier
+            .onPreviewKeyEvent { e ->
+                if (e.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                when {
+                    e.key == Key.F && e.isCtrlPressed && !isCompanion -> { searchOpen = true; true }
+                    // Esc снимает сначала поиск; «назад» — только если снимать нечего.
+                    e.key == Key.Escape && searchOpen -> { searchOpen = false; query = ""; true }
+                    else -> false
+                }
+            }
+            .dragAndDropTarget(shouldStartDragAndDrop = { true }, target = dropTarget),
+        snackbarHost = { SnackbarHost(snackbar) },
+        topBar = {
             Column {
                 TopAppBar(
-                    title = { 
-                        Row(
-                            modifier = Modifier.clickable { onHeaderClick() },
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            group?.let {
-                                Avatar(
-                                    avatarBytes = groupAvatars[chatIdHex] ?: viewModel.getGroupAvatar(it.chatId),
-                                    name = it.title,
-                                    size = 32.dp
-                                )
-                                Spacer(modifier = Modifier.width(8.dp))
-                            }
-                            contact?.let {
-                                Avatar(
-                                    avatarBytes = it.peerIk.toHexString().let { ik -> contactAvatars[ik] } ?: viewModel.getAvatarOf(it.peerIk),
-                                    name = it.localName ?: it.displayName,
-                                    size = 32.dp
-                                )
-                                Spacer(modifier = Modifier.width(8.dp))
-                            }
-                            Column {
-                                Text(group?.title ?: contact?.let { it.localName ?: it.displayName } ?: Strings.CHATS)
-                                if (group != null) {
-                                    Text(
-                                        text = if (group.joined) Strings.GROUP_INFO else Strings.GROUP_LEFT_BADGE,
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = MaterialTheme.colorScheme.outline
-                                    )
-                                }
-                                if (contact?.seenOnLan == true) {
-                                    Text(
-                                        text = Strings.ONLINE_LAN,
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = MaterialTheme.colorScheme.primary
-                                    )
-                                }
-                            }
-                        }
-                    },
                     navigationIcon = {
-                        if (showBackButton) {
-                            IconButton(onClick = onBack) {
-                                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = Strings.CANCEL)
-                            }
+                        if (showBackButton) IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, Strings.CANCEL) }
+                    },
+                    title = {
+                        if (searchOpen) {
+                            TextField(
+                                value = query,
+                                onValueChange = { query = it },
+                                placeholder = { Text(Strings.SEARCH_HINT) },
+                                singleLine = true,
+                                modifier = Modifier.fillMaxWidth(),
+                                colors = TextFieldDefaults.colors(focusedContainerColor = Color.Transparent, unfocusedContainerColor = Color.Transparent),
+                            )
+                        } else {
+                            ChatHeader(
+                                title = group?.title ?: contact?.let { it.localName ?: it.displayName } ?: Strings.CHATS,
+                                subtitle = when {
+                                    group != null && !group.joined -> Strings.GROUP_LEFT_BADGE
+                                    group != null -> members?.let { Strings.GROUP_MEMBERS_COUNT.format(it.size) } ?: Strings.GROUP_INFO
+                                    contact?.seenOnLan == true -> Strings.ONLINE_LAN
+                                    else -> null
+                                },
+                                avatar = if (group != null) groupAvatars[chatHex] ?: viewModel.getGroupAvatar(chatId)
+                                    else contact?.let { contactAvatars[it.peerIk.toHexString()] ?: viewModel.getAvatarOf(it.peerIk) },
+                                onClick = onHeaderClick,
+                            )
                         }
                     },
                     actions = {
-                        IconButton(onClick = { isSearching = !isSearching }) {
-                            Icon(Icons.Default.Search, contentDescription = Strings.SEARCH)
-                        }
-                        IconButton(onClick = { showChatMenu = true }) {
-                            Icon(Icons.Default.MoreVert, contentDescription = "Menu")
-                        }
-                        DropdownMenu(
-                            expanded = showChatMenu,
-                            onDismissRequest = { showChatMenu = false }
-                        ) {
-                            DropdownMenuItem(
-                                text = { Text(Strings.CLEAR_CHAT) },
-                                onClick = {
-                                    showChatMenu = false
-                                    showClearChatDialog = true
-                                },
-                                leadingIcon = { Icon(Icons.Default.Delete, contentDescription = null) }
-                            )
-                        }
-                    }
-                )
-                if (isSearching) {
-                    TextField(
-                        value = searchQuery,
-                        onValueChange = { searchQuery = it },
-                        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
-                        placeholder = { Text(Strings.SEARCH_HINT) },
-                        leadingIcon = { Icon(Icons.Default.Search, null) },
-                        trailingIcon = {
-                            IconButton(onClick = { 
-                                isSearching = false
-                                searchQuery = ""
-                                viewModel.clearSearch()
-                            }) {
-                                Icon(Icons.Default.Close, null)
+                        if (searchOpen) {
+                            IconButton(onClick = { searchOpen = false; query = "" }) { Icon(Icons.Default.Close, Strings.CANCEL) }
+                        } else {
+                            if (!isCompanion) IconButton(onClick = { searchOpen = true }) { Icon(Icons.Default.Search, Strings.SEARCH) }
+                            Box {
+                                IconButton(onClick = { menuOpen = true }) { Icon(Icons.Default.MoreVert, Strings.CHAT_MORE) }
+                                DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                                    DropdownMenuItem(
+                                        text = { Text(Strings.CLEAR_CHAT) },
+                                        leadingIcon = { Icon(Icons.Default.DeleteSweep, null) },
+                                        onClick = { menuOpen = false; confirmClear = true },
+                                    )
+                                }
                             }
-                        },
-                        singleLine = true,
-                        colors = TextFieldDefaults.colors(
-                            focusedContainerColor = MaterialTheme.colorScheme.surface,
-                            unfocusedContainerColor = MaterialTheme.colorScheme.surface
-                        )
-                    )
-                }
+                        }
+                    },
+                )
+                TransportStrip(viewModel, isCompanion, companionLinked)
             }
         },
         bottomBar = {
-            // Вышедший из группы читает, но не пишет: ядро отказало бы.
             if (group != null && !group.joined) {
                 Surface(tonalElevation = 2.dp, modifier = Modifier.fillMaxWidth()) {
-                    Text(
-                        Strings.GROUP_YOU_LEFT,
-                        modifier = Modifier.padding(16.dp),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.outline
-                    )
+                    Text(Strings.GROUP_YOU_LEFT, modifier = Modifier.padding(16.dp), color = MaterialTheme.colorScheme.outline)
                 }
             } else {
-            Surface(tonalElevation = 2.dp) {
-                Column {
-                    // Reply Preview
-                    replyingTo?.let { msg ->
-                        Row(
-                            modifier = Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceVariant).padding(8.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Box(modifier = Modifier.width(4.dp).height(32.dp).background(MaterialTheme.colorScheme.primary))
-                            Spacer(Modifier.width(8.dp))
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(if (msg.mine) "Вы" else (msg.author ?: contact?.localName ?: contact?.displayName ?: "???"), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
-                                Text(msg.body, style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
-                            }
-                            IconButton(onClick = { replyingTo = null }) {
-                                Icon(Icons.Default.Close, null)
-                            }
-                        }
-                    }
-                    
-                    // Files Preview
-                    if (selectedFiles.isNotEmpty()) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth().padding(8.dp),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            selectedFiles.forEach { file ->
-                                Card(modifier = Modifier.size(64.dp)) {
-                                    Box(contentAlignment = Alignment.TopEnd) {
-                                        Column(modifier = Modifier.fillMaxSize().padding(4.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
-                                            Icon(Icons.Default.InsertDriveFile, null, modifier = Modifier.size(24.dp))
-                                            Text(file.name, style = MaterialTheme.typography.labelSmall, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
-                                        }
-                                        IconButton(onClick = { selectedFiles = selectedFiles - file }, modifier = Modifier.size(16.dp)) {
-                                            Icon(Icons.Default.Cancel, null, tint = MaterialTheme.colorScheme.error)
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-
-                    Row(
-                        modifier = Modifier.padding(8.dp).fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        IconButton(onClick = { 
-                            selectedFiles = selectedFiles + FilePicker.pickFiles()
-                        }) {
-                            Icon(Icons.Default.Add, contentDescription = Strings.ATTACH_FILES)
-                        }
-                        
-                        OutlinedTextField(
-                            value = text,
-                            onValueChange = { text = it },
-                            modifier = Modifier.weight(1f),
-                            placeholder = { Text(if (editingMessage != null) Strings.EDIT else Strings.MESSAGE) },
-                            maxLines = 4,
-                            leadingIcon = if (editingMessage != null) {
-                                {
-                                    IconButton(onClick = { 
-                                        editingMessage = null
-                                        text = ""
-                                    }) {
-                                        Icon(Icons.Default.Close, contentDescription = Strings.CANCEL)
-                                    }
-                                }
-                            } else null
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        IconButton(
-                            onClick = {
-                                if (text.isNotBlank() || selectedFiles.isNotEmpty()) {
-                                    val currentEditing = editingMessage
-                                    val currentReply = replyingTo
-                                    if (currentEditing != null) {
-                                        viewModel.editMessage(chatId, currentEditing.msgId, text)
-                                        editingMessage = null
-                                    } else if (selectedFiles.isNotEmpty()) {
-                                        viewModel.sendFiles(chatId, selectedFiles, text)
-                                        selectedFiles = emptyList()
-                                    } else if (currentReply != null) {
-                                        viewModel.reply(chatId, currentReply.msgId, text)
-                                        replyingTo = null
-                                    } else {
-                                        viewModel.sendText(chatId, text)
-                                    }
-                                    text = ""
-                                }
-                            },
-                            enabled = text.isNotBlank() || selectedFiles.isNotEmpty()
-                        ) {
-                            if (editingMessage != null) {
-                                Icon(Icons.Default.Check, contentDescription = Strings.SAVE)
-                            } else {
-                                Icon(Icons.AutoMirrored.Filled.Send, contentDescription = Strings.SEND)
-                            }
-                        }
-                    }
-                }
-            }
+                Composer(
+                    value = text,
+                    onValueChange = { text = it },
+                    banner = editing?.let { ComposerBanner.Edit(notices.edit) }
+                        ?: replyTo?.let { ComposerBanner.Reply(authorName(it), MessagePreview.of(it)) },
+                    onCancelBanner = {
+                        if (editing != null) text = TextFieldValue("")
+                        editing = null
+                        replyTo = null
+                    },
+                    attachments = attachments,
+                    onRemoveAttachment = { f -> attachments = attachments - f },
+                    onAttach = { attachments = (attachments + FilePicker.pickFiles()).distinct() },
+                    onAttachFiles = { files -> attachments = (attachments + files).distinct() },
+                    sendWithCtrlEnter = sendWithCtrlEnter,
+                    onSend = { send() },
+                    onEditLast = {
+                        val last = chatMessages.lastOrNull { canEdit(it.raw) }?.raw
+                        if (last != null) { startEdit(last); true } else false
+                    },
+                    focusRequester = composerFocus,
+                )
             }
         },
-        snackbarHost = { SnackbarHost(remember { SnackbarHostState() }) }
-    ) { innerPadding ->
-        Box(modifier = Modifier.padding(innerPadding).fillMaxSize()) {
-            chatTheme.backgroundImageUri?.let { uriString ->
-                Image(
-                    painter = rememberAsyncImagePainter(model = uriString),
-                    contentDescription = null,
-                    modifier = Modifier.fillMaxSize(),
-                    contentScale = ContentScale.Crop,
-                    alpha = chatTheme.backgroundOpacity
-                )
+    ) { padding ->
+        Box(Modifier.padding(padding).fillMaxSize()) {
+            chatTheme.backgroundImageUri?.let { uri ->
+                Image(rememberAsyncImagePainter(uri), null, Modifier.fillMaxSize(), contentScale = ContentScale.Crop, alpha = chatTheme.backgroundOpacity)
             }
-            
-            val searchResults by viewModel.searchResults.collectAsState()
-            val listMessages = if (isSearching && searchQuery.isNotBlank()) searchResults.reversed() else displayMessages
 
-            LazyColumn(
-                state = listState,
-                modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(16.dp),
-                reverseLayout = true,
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                items(listMessages, key = { it.msgId.toHexString() }) { msg ->
-                    val status = messageStatuses[msg.msgId.toHexString()] ?: msg.status
-                    Box(modifier = Modifier.fillMaxWidth().animateItem()) {
-                        MessageBubble(
-                            message = msg,
+            if (searchOpen && query.isNotBlank()) {
+                SearchResults(viewModel, onPick = { jumpTo(it.msgId) })
+            } else {
+                val outgoing = if (chatTheme.themeColor != Color.Unspecified) chatTheme.themeColor else MaterialTheme.colorScheme.primary
+                LazyColumn(
+                    state = listState,
+                    reverseLayout = true,
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
+                ) {
+                    items(display, key = { it.key }) { message ->
+                        MessageItem(
+                            message = message,
+                            isGroup = isGroup,
+                            outgoing = outgoing,
+                            highlighted = message.key == highlightKey,
+                            expanded = message.key in expanded,
+                            onToggleExpanded = { expanded = if (message.key in expanded) expanded - message.key else expanded + message.key },
+                            revealed = revealed[message.key].orEmpty(),
+                            onReveal = { i -> revealed = revealed + (message.key to (revealed[message.key].orEmpty() + i)) },
                             viewModel = viewModel,
                             chatId = chatId,
-                            outgoingColor = if (chatTheme.themeColor != Color.Unspecified) chatTheme.themeColor else MaterialTheme.colorScheme.primary,
-                            status = status,
-                            onRetry = { viewModel.resendMessage(chatId, msg.body) },
-                            onDelete = { viewModel.deleteMessages(chatId, listOf(msg.msgId)) },
-                            onRetract = { viewModel.retractMessages(chatId, listOf(msg.msgId)) },
-                            onEdit = { 
-                                editingMessage = msg
-                                text = msg.body
-                            },
-                            onReply = { replyingTo = msg },
-                            onForward = { showForwardDialog = listOf(msg.msgId) },
-                            onReaction = { emoji -> viewModel.setReaction(chatId, msg.msgId, emoji) },
-                            onReplyClick = { replyId ->
+                            contactAvatars = contactAvatars,
+                            repliedMessages = repliedMessages,
+                            authorName = ::authorName,
+                            waitingNotice = notices.waiting,
+                            onJump = ::jumpTo,
+                            onSaved = { path ->
                                 scope.launch {
-                                    val index = listMessages.indexOfFirst { it.msgId.contentEquals(replyId) }
-                                    if (index != -1) {
-                                        listState.animateScrollToItem(index)
-                                    }
+                                    val result = snackbar.showSnackbar(Strings.CHAT_SAVED_TO.format(File(path).name), actionLabel = Strings.CHAT_SHOW_IN_FOLDER, duration = SnackbarDuration.Short)
+                                    if (result == SnackbarResult.ActionPerformed) FileUtils.openDirectory(File(path))
                                 }
                             },
-                            retractionNotice = { viewModel.getRetractionNotice() }
+                            actions = MessageActions(
+                                onReply = { replyTo = message.raw; editing = null; runCatching { composerFocus.requestFocus() } },
+                                onReact = { emoji -> viewModel.setReaction(chatId, message.msgId, emoji) },
+                                onCopy = { ClipboardUtils.copyToClipboard(message.raw.body) },
+                                onForward = { forwardIds = listOf(message.msgId) },
+                                onDeleteForMe = { confirmDelete = message.raw },
+                                onRetractForAll = if (message.raw.mine) ({ confirmRetract = message.raw }) else null,
+                                onEdit = if (canEdit(message.raw)) ({ startEdit(message.raw) }) else null,
+                                onRetry = if (message.raw.mine && message.status == FfiDeliveryStatus.UNDELIVERABLE && message.raw.files.isEmpty())
+                                    ({ viewModel.resendMessage(chatId, message.raw) }) else null,
+                            ),
+                            onAuthorClick = message.author?.chatId?.let { authorChat -> { viewModel.openContact(authorChat, fromChat = true) } },
                         )
                     }
-                }
-                
-                if (!isSearching) {
-                    item {
-                        Box(modifier = Modifier.fillMaxWidth().padding(vertical = 16.dp), contentAlignment = Alignment.Center) {
+                    item(key = "history-start") {
+                        Box(Modifier.fillMaxWidth().padding(vertical = 16.dp), contentAlignment = Alignment.Center) {
                             Text(
-                                text = Strings.ENCRYPTED_CONNECTION,
+                                if (viewModel.isHistoryComplete(chatId) || display.isEmpty()) Strings.CHAT_HISTORY_START else Strings.CHAT_LOADING_OLDER,
                                 style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.outline
+                                color = MaterialTheme.colorScheme.outline,
                             )
                         }
                     }
                 }
+
+                // Кнопка «вниз», когда листаем историю.
+                if (listState.firstVisibleItemIndex > 2) {
+                    SmallFloatingActionButton(
+                        onClick = { scope.launch { listState.animateScrollToItem(0) } },
+                        modifier = Modifier.align(Alignment.BottomEnd).padding(16.dp),
+                    ) { Icon(Icons.Default.KeyboardArrowDown, Strings.CHAT_SCROLL_DOWN) }
+                }
+            }
+
+            if (dragging) {
+                Box(
+                    Modifier.fillMaxSize().padding(12.dp)
+                        .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.08f), RoundedCornerShape(16.dp))
+                        .border(2.dp, MaterialTheme.colorScheme.primary, RoundedCornerShape(16.dp)),
+                    contentAlignment = Alignment.Center,
+                ) { Text(Strings.CHAT_DROP_FILES, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary) }
             }
         }
     }
 
-    if (showClearChatDialog) {
-        AlertDialog(
-            onDismissRequest = { showClearChatDialog = false },
-            title = { Text(Strings.CLEAR_CHAT) },
-            text = { Text(Strings.CLEAR_CHAT_DESC) },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        viewModel.clearChat(chatId)
-                        showClearChatDialog = false
-                    },
-                    colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
-                ) {
-                    Text(Strings.DELETE)
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showClearChatDialog = false }) {
-                    Text(Strings.CANCEL)
-                }
-            }
-        )
+    forwardIds?.let { ids ->
+        ForwardDialog(viewModel, notices.forward, onDismiss = { forwardIds = null }) { target ->
+            viewModel.forwardMessages(target, ids)
+            forwardIds = null
+        }
     }
-
-    if (showForwardDialog != null) {
-        val allContacts by viewModel.contacts.collectAsState()
-        AlertDialog(
-            onDismissRequest = { showForwardDialog = null },
-            title = { Text(Strings.FORWARD_TO) },
-            text = {
-                LazyColumn(modifier = Modifier.heightIn(max = 400.dp)) {
-                    items(allContacts) { targetContact ->
-                        ListItem(
-                            headlineContent = { Text(targetContact.localName ?: targetContact.displayName) },
-                            leadingContent = {
-                                val contactAvatars by viewModel.contactAvatars.collectAsState()
-                                Avatar(
-                                    avatarBytes = contactAvatars[targetContact.peerIk.toHexString()] ?: viewModel.getAvatarOf(targetContact.peerIk),
-                                    name = targetContact.localName ?: targetContact.displayName
-                                )
-                            },
-                            modifier = Modifier.clickable {
-                                viewModel.forwardMessages(targetContact.chatId, showForwardDialog!!)
-                                showForwardDialog = null
-                            }
-                        )
-                    }
-                }
-            },
-            confirmButton = {},
-            dismissButton = {
-                TextButton(onClick = { showForwardDialog = null }) {
-                    Text(Strings.CANCEL)
-                }
-            }
-        )
+    confirmDelete?.let { msg ->
+        ConfirmDialog(Strings.CHAT_DELETE_TITLE, notices.deletion, Strings.CHAT_DELETE_FOR_ME, onDismiss = { confirmDelete = null }) {
+            viewModel.deleteMessages(chatId, listOf(msg.msgId)); confirmDelete = null
+        }
+    }
+    confirmRetract?.let { msg ->
+        // Текст ядра до отзыва: удалить у собеседника можно только попросить (FFI.md).
+        ConfirmDialog(Strings.CHAT_RETRACT_TITLE, notices.retraction, Strings.CHAT_RETRACT_FOR_ALL, onDismiss = { confirmRetract = null }) {
+            viewModel.retractMessages(chatId, listOf(msg.msgId)); confirmRetract = null
+        }
+    }
+    if (confirmClear) {
+        ConfirmDialog(Strings.CLEAR_CHAT, Strings.CLEAR_CHAT_DESC, Strings.CLEAR_CHAT, onDismiss = { confirmClear = false }) {
+            viewModel.clearChat(chatId); confirmClear = false
+        }
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class, androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
-fun MessageBubble(
-    message: FfiMessage,
+private fun MessageItem(
+    message: ChatMessage,
+    isGroup: Boolean,
+    outgoing: Color,
+    highlighted: Boolean,
+    expanded: Boolean,
+    onToggleExpanded: () -> Unit,
+    revealed: Set<Int>,
+    onReveal: (Int) -> Unit,
     viewModel: RatatoskViewModel,
     chatId: ByteArray,
-    outgoingColor: Color,
-    status: FfiDeliveryStatus?,
-    onRetry: () -> Unit,
-    onDelete: () -> Unit,
-    onRetract: () -> Unit,
-    onEdit: () -> Unit,
-    onReply: () -> Unit,
-    onForward: () -> Unit,
-    onReaction: (String?) -> Unit,
-    onReplyClick: (ByteArray) -> Unit,
-    retractionNotice: () -> String
+    contactAvatars: Map<String, ByteArray>,
+    repliedMessages: Map<String, FfiMessage?>,
+    authorName: (FfiMessage) -> String,
+    waitingNotice: String,
+    onJump: (ByteArray) -> Unit,
+    onSaved: (String) -> Unit,
+    actions: MessageActions,
+    onAuthorClick: (() -> Unit)?,
 ) {
-    val alignment = if (message.mine) Alignment.CenterEnd else Alignment.CenterStart
-    val bubbleColor = if (message.mine) outgoingColor else MaterialTheme.colorScheme.surfaceVariant
-    val contentColor = if (message.mine) {
-        if (bubbleColor.luminance() > 0.5f) Color.Black else Color.White
-    } else {
-        MaterialTheme.colorScheme.onSurfaceVariant
-    }
-    
-    val linkColor = if (message.mine) contentColor else MaterialTheme.colorScheme.primary
-    val fullAnnotatedBody = remember(message.body, linkColor) {
-        MarkdownUtils.parseMarkdown(message.body, linkColor)
-    }
+    val replyId = message.raw.replyTo
+    // Цитата — через поток: пришла позже — перерисуется (ревью Android 2.5).
+    val reply = replyId?.let { repliedMessages[it.toHexString()] ?: viewModel.getMessage(it) }
+    MessageRow(
+        message = message,
+        isGroup = isGroup,
+        outgoingColor = outgoing,
+        highlighted = highlighted,
+        expanded = expanded,
+        onToggleExpanded = onToggleExpanded,
+        revealedSpoilers = revealed,
+        onRevealSpoiler = onReveal,
+        authorAvatar = message.author?.avatarKey?.let { contactAvatars[it] },
+        onAuthorClick = onAuthorClick,
+        reply = reply,
+        replyAuthor = reply?.let(authorName),
+        onReplyClick = replyId?.let { id -> { onJump(id) } },
+        waitingNotice = waitingNotice,
+        actions = actions,
+        attachments = { contentColor, accent ->
+            AttachmentList(message.raw.files, chatId, viewModel, contentColor, accent, onSaved)
+        },
+    )
+}
 
-    var isExpanded by remember { mutableStateOf(false) }
-    var revealedSpoilers by remember { mutableStateOf(setOf<Int>()) }
-    val bringIntoViewRequester = remember { BringIntoViewRequester() }
-    
-    val threshold = 300
-    val isLong = message.body.length > threshold
-
-    val annotatedBody = remember(fullAnnotatedBody, isExpanded, isLong, linkColor, revealedSpoilers) {
-        val base = if (isLong && !isExpanded) {
-            val safeThreshold = if (fullAnnotatedBody.length > threshold) threshold else fullAnnotatedBody.length
-            buildAnnotatedString {
-                append(fullAnnotatedBody.subSequence(0, safeThreshold))
-                append("... ")
-                pushStringAnnotation(tag = "EXPAND", annotation = "expand")
-                withStyle(style = SpanStyle(color = linkColor, fontWeight = FontWeight.Bold)) {
-                    append("еще")
-                }
-                pop()
-            }
-        } else {
-            fullAnnotatedBody
+@Composable
+private fun ChatHeader(title: String, subtitle: String?, avatar: ByteArray?, onClick: () -> Unit) {
+    Row(Modifier.clip(RoundedCornerShape(8.dp)).clickable(onClick = onClick).padding(4.dp), verticalAlignment = Alignment.CenterVertically) {
+        Avatar(avatarBytes = avatar, name = title, size = 36.dp)
+        Spacer(Modifier.width(10.dp))
+        Column {
+            Text(title, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            if (subtitle != null) Text(subtitle, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline)
         }
-        
-        val spoilers = base.getStringAnnotations("SPOILER", 0, base.length)
-        if (spoilers.isEmpty()) base else buildAnnotatedString {
-            append(base)
-            spoilers.forEach { annotation ->
-                val isRevealed = revealedSpoilers.contains(annotation.start)
-                addStyle(
-                    style = SpanStyle(
-                        background = if (isRevealed) Color.Gray.copy(alpha = 0.2f) else Color.DarkGray,
-                        color = if (isRevealed) contentColor else Color.Transparent
-                    ),
-                    start = annotation.start,
-                    end = annotation.end
+    }
+}
+
+/** Полоса под заголовком: Tor поднимается, компаньон ещё не связался с телефоном. */
+@Composable
+private fun TransportStrip(viewModel: RatatoskViewModel, isCompanion: Boolean, companionLinked: Boolean) {
+    val torEnabled by viewModel.torEnabled.collectAsState()
+    val torStatus by viewModel.torStatus.collectAsState()
+    val status = torStatus
+    when {
+        isCompanion && !companionLinked -> {
+            LinearProgressIndicator(Modifier.fillMaxWidth())
+            Text(Strings.CHAT_COMPANION_LINKING, style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(horizontal = 16.dp, vertical = 2.dp))
+        }
+        !isCompanion && torEnabled && status != null && status.fraction < 1f -> {
+            LinearProgressIndicator(progress = { status.fraction }, modifier = Modifier.fillMaxWidth())
+        }
+    }
+}
+
+@Composable
+private fun SearchResults(viewModel: RatatoskViewModel, onPick: (FfiMessage) -> Unit) {
+    val results by viewModel.searchResults.collectAsState()
+    val searching by viewModel.isSearching.collectAsState()
+    when {
+        searching && results.isEmpty() -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
+        results.isEmpty() -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text(Strings.CHAT_NO_RESULTS, color = MaterialTheme.colorScheme.outline) }
+        else -> LazyColumn(Modifier.fillMaxSize()) {
+            items(results, key = { it.msgId.toHexString() }) { msg ->
+                ListItem(
+                    headlineContent = { Text(MessagePreview.of(msg), maxLines = 2, overflow = TextOverflow.Ellipsis) },
+                    supportingContent = {
+                        Text(java.text.SimpleDateFormat("dd.MM.yyyy HH:mm").format(java.util.Date(msg.wallMs.toLong())), style = MaterialTheme.typography.labelSmall)
+                    },
+                    modifier = Modifier.clickable { onPick(msg) },
                 )
             }
         }
     }
+}
 
-    var showMenu by remember { mutableStateOf(false) }
-    val clipboardManager = LocalClipboardManager.current
-    val uriHandler = LocalUriHandler.current
-    var textLayoutResult by remember { mutableStateOf<TextLayoutResult?>(null) }
-
-    Box(modifier = Modifier.fillMaxWidth(), contentAlignment = alignment) {
-        Column(horizontalAlignment = if (message.mine) Alignment.End else Alignment.Start) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = if (message.mine) Arrangement.End else Arrangement.Start,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                if (message.mine && status == FfiDeliveryStatus.UNDELIVERABLE) {
-                    IconButton(onClick = onRetry) {
-                        Icon(Icons.Default.Refresh, contentDescription = Strings.RETRY, tint = MaterialTheme.colorScheme.error)
+/** Переслать: личные чаты и группы, в которых мы состоим; текст ядра — до выбора. */
+@Composable
+private fun ForwardDialog(viewModel: RatatoskViewModel, notice: String, onDismiss: () -> Unit, onPick: (ByteArray) -> Unit) {
+    val contacts by viewModel.contacts.collectAsState()
+    val groups by viewModel.groups.collectAsState()
+    val avatars by viewModel.contactAvatars.collectAsState()
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(Strings.FORWARD_TO) },
+        text = {
+            Column {
+                if (notice.isNotBlank()) Text(notice, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(bottom = 8.dp))
+                LazyColumn(Modifier.heightIn(max = 420.dp)) {
+                    val joined = groups.filter { it.joined }
+                    if (joined.isNotEmpty()) {
+                        item { Text(Strings.FORWARD_GROUPS, style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(vertical = 4.dp)) }
+                        items(joined, key = { "g" + it.chatId.toHexString() }) { g ->
+                            ListItem(
+                                headlineContent = { Text(g.title) },
+                                leadingContent = { Icon(Icons.Default.Groups, null) },
+                                modifier = Modifier.clickable { onPick(g.chatId) },
+                            )
+                        }
                     }
-                }
-
-                Card(
-                    shape = RoundedCornerShape(
-                        topStart = 16.dp, topEnd = 16.dp,
-                        bottomStart = if (message.mine) 16.dp else 0.dp,
-                        bottomEnd = if (message.mine) 0.dp else 16.dp
-                    ),
-                    colors = CardDefaults.cardColors(containerColor = bubbleColor, contentColor = contentColor),
-                    modifier = Modifier.widthIn(max = 450.dp).bringIntoViewRequester(bringIntoViewRequester)
-                ) {
-                    Column(
-                        modifier = Modifier.padding(12.dp).pointerInput(annotatedBody) {
-                            detectTapGestures(
-                                onTap = { offset ->
-                                    textLayoutResult?.let { layout ->
-                                        val characterIndex = layout.getOffsetForPosition(offset)
-                                        annotatedBody.getStringAnnotations("URL", characterIndex, characterIndex)
-                                            .firstOrNull()?.let { annotation ->
-                                                uriHandler.openUri(annotation.item)
-                                                return@detectTapGestures
-                                            }
-                                        annotatedBody.getStringAnnotations("EXPAND", characterIndex, characterIndex)
-                                            .firstOrNull()?.let {
-                                                isExpanded = true
-                                                return@detectTapGestures
-                                            }
-                                        annotatedBody.getStringAnnotations("SPOILER", characterIndex, characterIndex)
-                                            .firstOrNull()?.let { annotation ->
-                                                if (!revealedSpoilers.contains(annotation.start)) {
-                                                    revealedSpoilers = revealedSpoilers + annotation.start
-                                                    return@detectTapGestures
-                                                }
-                                            }
-                                    }
-                                    if (isLong) isExpanded = !isExpanded
-                                },
-                                onLongPress = { showMenu = true }
-                            )
-                        }
-                    ) {
-                        // Reply to UI
-                        message.replyTo?.let { replyId ->
-                            val repliedMsg = viewModel.getMessage(replyId)
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(bottom = 8.dp)
-                                    .clip(RoundedCornerShape(4.dp))
-                                    .background(contentColor.copy(alpha = 0.1f))
-                                    .clickable { onReplyClick(replyId) }
-                                    .padding(8.dp)
-                            ) {
-                                Box(modifier = Modifier.width(2.dp).fillMaxHeight().background(linkColor))
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text(
-                                    text = repliedMsg?.body ?: Strings.MESSAGE_UNAVAILABLE,
-                                    style = MaterialTheme.typography.bodySmall,
-                                    maxLines = 2,
-                                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
-                                    color = contentColor.copy(alpha = 0.8f)
-                                )
-                            }
-                        }
-
-                        if (message.forwarded) {
-                            Text(
-                                text = Strings.FORWARDED,
-                                style = MaterialTheme.typography.labelSmall,
-                                color = contentColor.copy(alpha = 0.7f),
-                                modifier = Modifier.padding(bottom = 2.dp)
-                            )
-                        }
-                        
-                        // Files UI
-                        if (message.files.isNotEmpty()) {
-                            FileAttachment(message.files, viewModel, chatId, contentColor, linkColor)
-                        }
-
-                        // Shared Contact UI
-                        message.sharedContact?.let { shared ->
-                            SharedContactCard(shared, { viewModel.addSharedContact(message.msgId) }, contentColor, linkColor)
-                        }
-
-                        if (message.body.isNotBlank()) {
-                            Text(
-                                text = annotatedBody,
-                                style = MaterialTheme.typography.bodyMedium.copy(color = contentColor),
-                                modifier = Modifier.padding(bottom = 4.dp),
-                                onTextLayout = { textLayoutResult = it }
-                            )
-                        }
-
-                        Row(
-                            modifier = Modifier.align(Alignment.End),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(2.dp)
-                        ) {
-                            if (message.editedAtMs != null) {
-                                Text("изм.", style = MaterialTheme.typography.labelSmall, color = contentColor.copy(alpha = 0.6f))
-                            }
-                            Text(
-                                text = java.text.SimpleDateFormat("HH:mm").format(java.util.Date(message.wallMs.toLong())),
-                                style = MaterialTheme.typography.labelSmall,
-                                color = contentColor.copy(alpha = 0.8f)
-                            )
-                            if (message.mine) MessageStatusIcon(status, contentColor)
-                        }
+                    item { Text(Strings.FORWARD_CONTACTS, style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(vertical = 4.dp)) }
+                    items(contacts, key = { "c" + it.chatId.toHexString() }) { c ->
+                        val name = c.localName ?: c.displayName
+                        ListItem(
+                            headlineContent = { Text(name) },
+                            leadingContent = { Avatar(avatarBytes = avatars[c.peerIk.toHexString()], name = name) },
+                            modifier = Modifier.clickable { onPick(c.chatId) },
+                        )
                     }
                 }
             }
-            
-            // Reactions
-            if (message.reactions.isNotEmpty()) {
-                Row(
-                    modifier = Modifier.padding(top = 2.dp, start = 4.dp, end = 4.dp),
-                    horizontalArrangement = Arrangement.spacedBy(4.dp)
-                ) {
-                    val groups = message.reactions.groupBy { it.emoji }
-                    groups.forEach { (emoji, list) ->
-                        val hasMine = list.any { it.mine }
-                        Surface(
-                            color = if (hasMine) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant,
-                            shape = RoundedCornerShape(12.dp),
-                            modifier = Modifier.clickable { onReaction(if (hasMine) null else emoji) }
-                        ) {
-                            Row(modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)) {
-                                Text(emoji, style = MaterialTheme.typography.labelSmall)
-                                if (list.size > 1) {
-                                    Spacer(Modifier.width(2.dp))
-                                    Text(list.size.toString(), style = MaterialTheme.typography.labelSmall)
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        
-        DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
-            Row(modifier = Modifier.padding(8.dp)) {
-                val emojis = listOf("👍", "❤️", "😂", "😮", "😢", "🙏")
-                emojis.forEach { emoji ->
-                    val isSelected = message.reactions.any { it.mine && it.emoji == emoji }
-                    IconButton(onClick = { 
-                        onReaction(if (isSelected) null else emoji)
-                        showMenu = false 
-                    }) {
-                        Text(emoji, style = MaterialTheme.typography.bodyLarge, color = if (isSelected) MaterialTheme.colorScheme.primary else Color.Unspecified)
-                    }
-                }
-            }
-            HorizontalDivider()
-            DropdownMenuItem(
-                text = { Text(Strings.COPY) }, 
-                onClick = { 
-                    ClipboardUtils.copyToClipboard(message.body)
-                    showMenu = false 
-                },
-                leadingIcon = { Icon(Icons.Default.ContentCopy, null) }
-            )
-            DropdownMenuItem(
-                text = { Text(Strings.REPLY) },
-                onClick = { showMenu = false; onReply() },
-                leadingIcon = { Icon(Icons.AutoMirrored.Filled.Reply, null) }
-            )
-            if (message.mine) DropdownMenuItem(
-                text = { Text(Strings.EDIT) }, 
-                onClick = { showMenu = false; onEdit() },
-                leadingIcon = { Icon(Icons.Default.Edit, null) }
-            )
-            DropdownMenuItem(
-                text = { Text(Strings.FORWARD) }, 
-                onClick = { showMenu = false; onForward() },
-                leadingIcon = { Icon(Icons.AutoMirrored.Filled.ArrowForward, null) }
-            )
-            if (message.mine) DropdownMenuItem(
-                text = { Text(Strings.RETRACT) }, 
-                onClick = { showMenu = false; onRetract() },
-                leadingIcon = { Icon(Icons.AutoMirrored.Filled.Undo, null) }
-            )
-            DropdownMenuItem(
-                text = { Text(Strings.DELETE) }, 
-                onClick = { showMenu = false; onDelete() },
-                leadingIcon = { Icon(Icons.Default.Delete, null) }
-            )
-        }
-    }
+        },
+        confirmButton = {},
+        dismissButton = { TextButton(onClick = onDismiss) { Text(Strings.CANCEL) } },
+    )
 }
 
 @Composable
-fun SharedContactCard(
-    sharedContact: FfiSharedContact,
-    onAdd: () -> Unit,
-    contentColor: Color,
-    linkColor: Color
-) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 4.dp)
-            .clip(RoundedCornerShape(8.dp))
-            .background(contentColor.copy(alpha = 0.1f))
-            .padding(8.dp)
-    ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Icon(
-                imageVector = Icons.Default.AccountCircle,
-                contentDescription = null,
-                tint = linkColor,
-                modifier = Modifier.size(40.dp)
-            )
-            Spacer(modifier = Modifier.width(8.dp))
-            Column(modifier = Modifier.weight(1f)) {
-                Text(text = sharedContact.displayName, style = MaterialTheme.typography.titleSmall, color = contentColor)
-                Text(text = sharedContact.fingerprint, style = MaterialTheme.typography.labelSmall, color = contentColor.copy(alpha = 0.6f))
-            }
-        }
-        
-        Spacer(modifier = Modifier.height(8.dp))
-        
-        if (sharedContact.mine) {
-            Text(text = "Это вы", style = MaterialTheme.typography.labelMedium, color = contentColor.copy(alpha = 0.6f), modifier = Modifier.align(Alignment.End))
-        } else if (sharedContact.alreadyKnown) {
-            Text(text = "Уже в контактах", style = MaterialTheme.typography.labelMedium, color = contentColor.copy(alpha = 0.6f), modifier = Modifier.align(Alignment.End))
-        } else {
-            Button(
-                onClick = onAdd,
-                modifier = Modifier.fillMaxWidth(),
-                colors = ButtonDefaults.buttonColors(containerColor = linkColor)
-            ) {
-                Icon(Icons.Default.PersonAdd, null, modifier = Modifier.size(18.dp))
-                Spacer(modifier = Modifier.width(8.dp))
-                Text(Strings.ADD_CONTACT)
-            }
-        }
-    }
+private fun ConfirmDialog(title: String, text: String, confirmLabel: String, onDismiss: () -> Unit, onConfirm: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(title) },
+        text = { if (text.isNotBlank()) Text(text) },
+        confirmButton = { TextButton(onClick = onConfirm) { Text(confirmLabel, color = MaterialTheme.colorScheme.error) } },
+        dismissButton = { Button(onClick = onDismiss) { Text(Strings.CANCEL) } },
+    )
 }
-
-@Composable
-fun FileAttachment(
-    files: List<FfiFile>,
-    viewModel: RatatoskViewModel,
-    chatId: ByteArray,
-    contentColor: Color,
-    linkColor: Color
-) {
-    files.forEach { file ->
-        val progress by viewModel.fileProgress.collectAsState()
-        val activeJobs by viewModel.activeJobsFlow.collectAsState()
-        val fileIdHex = file.fileId.toHexString()
-        val isExportingActive = activeJobs.contains(fileIdHex)
-        val currentProgress = progress[fileIdHex] ?: (if (file.complete) 1f else if (file.receivedChunks > 0UL) file.receivedChunks.toFloat() / file.chunkTotal.toFloat() else 0f)
-        val scope = rememberCoroutineScope()
-
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(vertical = 4.dp)
-                .clip(RoundedCornerShape(8.dp))
-                .background(contentColor.copy(alpha = 0.1f))
-                .clickable(enabled = file.complete || !file.incoming) {
-                    if (file.complete || !file.incoming) {
-                        viewModel.openFile(file)
-                    }
-                }
-                .padding(8.dp)
-        ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Default.InsertDriveFile, null, tint = linkColor, modifier = Modifier.size(32.dp))
-                Spacer(modifier = Modifier.width(8.dp))
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(text = file.name, style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis, color = contentColor)
-                    Text(text = formatFileSize(file.sizeBytes), style = MaterialTheme.typography.labelSmall, color = contentColor.copy(alpha = 0.6f))
-                }
-                
-                if (file.incoming && !file.accepted && !file.complete) {
-                    Row {
-                        IconButton(onClick = { viewModel.declineFile(chatId, file.fileId) }) {
-                            Icon(Icons.Default.Close, null, tint = MaterialTheme.colorScheme.error)
-                        }
-                        IconButton(onClick = { viewModel.acceptFile(chatId, file.fileId) }) {
-                            Icon(Icons.Default.Download, null, tint = linkColor)
-                        }
-                    }
-                } else {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        if (isExportingActive) {
-                            CircularProgressIndicator(progress = { currentProgress }, modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
-                            IconButton(onClick = { viewModel.cancelFileJob(file.fileId) }) {
-                                Icon(Icons.Default.Close, null, tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(16.dp))
-                            }
-                        } else {
-                            if (!file.complete && file.incoming) {
-                                CircularProgressIndicator(progress = { currentProgress }, modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
-                            }
-                            if (file.complete || !file.incoming) {
-                                IconButton(onClick = {
-                                    viewModel.downloadFile(file) { path ->
-                                        // TODO: show notification or snackbar
-                                    }
-                                }) {
-                                    Icon(Icons.Default.Download, null, tint = linkColor)
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-            
-            if (file.hasPreview) {
-                 val previewBytes = viewModel.getFilePreview(file.fileId)
-                 if (previewBytes != null) {
-                     Image(
-                         painter = rememberAsyncImagePainter(previewBytes),
-                         contentDescription = null,
-                         modifier = Modifier.fillMaxWidth().height(150.dp).clip(RoundedCornerShape(4.dp)).padding(top = 8.dp),
-                         contentScale = ContentScale.Fit
-                     )
-                 }
-            }
-        }
-    }
-}
-
-@Composable
-fun MessageStatusIcon(status: FfiDeliveryStatus?, color: Color) {
-    val icon: ImageVector? = when (status) {
-        FfiDeliveryStatus.PENDING -> Icons.Default.Refresh
-        FfiDeliveryStatus.WAITING -> Icons.Default.Refresh
-        FfiDeliveryStatus.SENT -> Icons.Default.Done
-        FfiDeliveryStatus.DELIVERED, FfiDeliveryStatus.READ -> Icons.Default.Done
-        FfiDeliveryStatus.UNDELIVERABLE -> Icons.Default.Error
-        null -> null
-    }
-    
-    val tint = if (status == FfiDeliveryStatus.READ) Color(0xFF40C4FF) else color
-
-    icon?.let {
-        Icon(imageVector = it, contentDescription = null, modifier = Modifier.size(16.dp), tint = tint)
-    }
-}
-
-fun formatFileSize(bytes: ULong): String {
-    val b = bytes.toDouble()
-    return when {
-        b < 1024 -> "%.0f B".format(b)
-        b < 1024 * 1024 -> "%.1f KB".format(b / 1024)
-        b < 1024 * 1024 * 1024 -> "%.1f MB".format(b / (1024 * 1024))
-        else -> "%.1f GB".format(b / (1024 * 1024 * 1024))
-    }
-}
-
-private fun ByteArray.toHexString() = joinToString("") { "%02x".format(it) }
-private fun String.hexToByteArray() = chunked(2).map { it.toInt(16).toByte() }.toByteArray()

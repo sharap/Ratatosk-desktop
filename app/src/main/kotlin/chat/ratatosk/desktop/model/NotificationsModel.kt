@@ -8,7 +8,10 @@ import chat.ratatosk.desktop.util.reactionToAnnounce
 import chat.ratatosk.desktop.util.toHexString
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.launchIn
@@ -33,6 +36,8 @@ interface NotificationsApi {
     /** Ключи уведомлений, которые пора убрать: человек открыл этот чат. */
     val notificationDismissals: SharedFlow<String>
     fun setWindowFocused(focused: Boolean)
+    /** Окно в фокусе — для «прочитано» и тишины уведомлений. */
+    val isWindowFocused: StateFlow<Boolean>
 }
 
 /**
@@ -53,8 +58,10 @@ class NotificationsModel(
     private val _dismissals = MutableSharedFlow<String>(extraBufferCapacity = 32)
     override val notificationDismissals = _dismissals.asSharedFlow()
 
-    @Volatile
-    private var windowFocused = false
+    private val _isWindowFocused = MutableStateFlow(false)
+    override val isWindowFocused: StateFlow<Boolean> = _isWindowFocused.asStateFlow()
+
+    private val windowFocused: Boolean get() = _isWindowFocused.value
 
     /** О чём уже сказали: события могут прийти повторно (replay шины ядра). */
     private val announced = object : LinkedHashMap<String, Unit>(64, 0.75f, false) {
@@ -80,7 +87,7 @@ class NotificationsModel(
     }
 
     override fun setWindowFocused(focused: Boolean) {
-        windowFocused = focused
+        _isWindowFocused.value = focused
         dismissIfSeen()
     }
 

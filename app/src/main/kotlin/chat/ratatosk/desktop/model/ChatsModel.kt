@@ -14,7 +14,13 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import org.ratatosk.core.FfiDeliveryStatus
 import org.ratatosk.core.FfiMessage
+import org.ratatosk.core.deletionNotice
+import org.ratatosk.core.editNotice
+import org.ratatosk.core.forwardNotice
+import org.ratatosk.core.maxEditAgeMs
 import org.ratatosk.core.retractionNotice
+import org.ratatosk.core.waitingNotice
+import kotlinx.coroutines.flow.first
 import java.io.File
 import java.util.concurrent.ConcurrentHashMap
 
@@ -35,7 +41,25 @@ interface ChatsApi {
     fun clearSearch()
     fun sendText(chatId: ByteArray, text: String)
     fun sendFiles(chatId: ByteArray, files: List<File>, text: String)
-    fun resendMessage(chatId: ByteArray, body: String)
+    /**
+     * Недоставленное (`UNDELIVERABLE`) текстовое — отправить заново: прежнее
+     * удаляется у себя, тот же текст уходит с той же цитатой. Повтора в ядре
+     * нет; простой повтор текста рядом с недоставленным давал дубль (ревью 5.4).
+     * Вложения повторить нельзя — путей к исходным файлам у приложения нет.
+     */
+    fun resendMessage(chatId: ByteArray, message: FfiMessage)
+    /** Догрузить историю постарше: ещё [page] сообщений. */
+    fun loadOlder(chatId: ByteArray, page: Int = 100)
+    /** Загружено ли всё, что есть (последняя догрузка не принесла нового). */
+    fun isHistoryComplete(chatId: ByteArray): Boolean
+    /**
+     * Догружать историю, пока сообщение не окажется в ленте, — не дальше
+     * [maxMessages]. `true` — нашлось.
+     */
+    suspend fun ensureMessageLoaded(chatId: ByteArray, msgId: ByteArray, maxMessages: Int = 5000): Boolean
+    /** Отметить прочитанным до [upTo]; повторы для того же сообщения не уходят в ядро. */
+    fun markReadUpTo(chatId: ByteArray, upTo: ByteArray)
+    val chatNotices: ChatNotices
     fun clearChat(chatId: ByteArray)
     fun deleteMessages(chatId: ByteArray, msgIds: List<ByteArray>)
     fun retractMessages(chatId: ByteArray, msgIds: List<ByteArray>)
@@ -139,8 +163,63 @@ class ChatsModel(session: SessionContext) : FeatureModel(session), ChatsApi {
         session.io("Failed to send files") { it.sendFiles(chatId, files, text) }
     }
 
-    override fun resendMessage(chatId: ByteArray, body: String) {
-        sendText(chatId, body)
+    override fun resendMessage(chatId: ByteArray, message: FfiMessage) {
+        if (message.files.isNotEmpty() || message.body.isBlank()) return
+        session.io("Failed to send") { backend ->
+            backend.deleteMessages(chatId, listOf(message.msgId))
+            val replyTo = message.replyTo
+            if (replyTo != null) backend.reply(chatId, replyTo, message.body) else backend.sendText(chatId, message.body)
+        }
+    }
+
+    override fun loadOlder(chatId: ByteArray, page: Int) {
+        val hex = chatId.toHexString()
+        if (isHistoryComplete(chatId)) return
+        loadMessages(chatId, (loadedLimits[hex] ?: DEFAULT_PAGE) + page)
+    }
+
+    override fun isHistoryComplete(chatId: ByteArray): Boolean {
+        val hex = chatId.toHexString()
+        val limit = loadedLimits[hex] ?: return false
+        // Пришло меньше, чем просили, — значит, старше ничего нет.
+        return (_messages.value[hex]?.size ?: 0) < limit
+    }
+
+    override suspend fun ensureMessageLoaded(chatId: ByteArray, msgId: ByteArray, maxMessages: Int): Boolean {
+        val hex = chatId.toHexString()
+        fun found() = _messages.value[hex]?.any { it.msgId.contentEquals(msgId) } == true
+        while (true) {
+            if (found()) return true
+            val limit = loadedLimits[hex] ?: DEFAULT_PAGE
+            if (limit >= maxMessages || isHistoryComplete(chatId)) return false
+            val before = _messages.value[hex]?.size ?: 0
+            loadMessages(chatId, minOf(limit + 500, maxMessages))
+            // Ответ приходит событием; ждём, пока лента вырастет, но не вечно.
+            kotlinx.coroutines.withTimeoutOrNull(5_000) {
+                _messages.first { (it[hex]?.size ?: 0) > before || it[hex]?.any { m -> m.msgId.contentEquals(msgId) } == true }
+            } ?: return found()
+        }
+    }
+
+    /** Докуда уже отметили прочитанным, по чатам. */
+    private val markedRead = ConcurrentHashMap<String, String>()
+
+    override fun markReadUpTo(chatId: ByteArray, upTo: ByteArray) {
+        val hex = chatId.toHexString()
+        val upToHex = upTo.toHexString()
+        if (markedRead.put(hex, upToHex) == upToHex) return
+        markRead(chatId, upTo)
+    }
+
+    override val chatNotices: ChatNotices by lazy {
+        ChatNotices(
+            edit = runCatching { editNotice() }.getOrDefault(""),
+            deletion = runCatching { deletionNotice() }.getOrDefault(""),
+            forward = runCatching { forwardNotice() }.getOrDefault(""),
+            retraction = runCatching { retractionNotice() }.getOrDefault(""),
+            waiting = runCatching { waitingNotice() }.getOrDefault(""),
+            maxEditAgeMs = runCatching { maxEditAgeMs().toLong() }.getOrDefault(7L * 24 * 3600 * 1000),
+        )
     }
 
     override fun clearChat(chatId: ByteArray) {
@@ -181,6 +260,8 @@ class ChatsModel(session: SessionContext) : FeatureModel(session), ChatsApi {
     override fun getMessage(msgId: ByteArray): FfiMessage? {
         val hex = msgId.toHexString()
         _repliedMessages.value[hex]?.let { return it }
+        // Цитата часто есть в уже загруженной ленте — у компаньона другого пути и нет.
+        _messages.value.values.asSequence().flatten().firstOrNull { it.msgId.contentEquals(msgId) }?.let { return it }
         // Цитата по идентификатору — из базы полного клиента.
         session.clientIo { client ->
             val msg = client.message(msgId)
@@ -228,6 +309,7 @@ class ChatsModel(session: SessionContext) : FeatureModel(session), ChatsApi {
     override fun reset() {
         searchJob?.cancel()
         loadedLimits.clear()
+        markedRead.clear()
         _activeChatId.value = null
         _activeChatIdFlow.value = null
         _messages.value = emptyMap()
@@ -242,3 +324,14 @@ class ChatsModel(session: SessionContext) : FeatureModel(session), ChatsApi {
         const val DEFAULT_PAGE = 100
     }
 }
+
+/** Тексты ядра, которые экран чата обязан показать до действия (FFI.md). */
+class ChatNotices(
+    val edit: String,
+    val deletion: String,
+    val forward: String,
+    val retraction: String,
+    /** Что сказать про статус WAITING: отправится само, когда собеседник появится. */
+    val waiting: String,
+    val maxEditAgeMs: Long,
+)

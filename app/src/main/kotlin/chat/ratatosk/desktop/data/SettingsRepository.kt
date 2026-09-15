@@ -22,6 +22,7 @@ class SettingsRepository(
         val ACCOUNTS_MAP = stringPreferencesKey("accounts_map")
         val COMPANION_PAIRINGS = stringPreferencesKey("companion_pairings")
         val CORE_LOG_ENABLED = booleanPreferencesKey("core_log_enabled")
+        val SEND_WITH_CTRL_ENTER = booleanPreferencesKey("send_with_ctrl_enter")
     }
 
     val accountsMap: Flow<Map<String, String>> = dataStore.data.map { preferences ->
@@ -57,6 +58,13 @@ class SettingsRepository(
 
     /** Вести ли журнал ядра в файл. Настройка процесса, а не аккаунта. */
     val coreLogEnabled: Flow<Boolean> = dataStore.data.map { it[Keys.CORE_LOG_ENABLED] ?: false }
+
+    /** `true` — отправка по Ctrl+Enter, Enter — новая строка; `false` — наоборот. */
+    val sendWithCtrlEnter: Flow<Boolean> = dataStore.data.map { it[Keys.SEND_WITH_CTRL_ENTER] ?: false }
+
+    suspend fun setSendWithCtrlEnter(value: Boolean) {
+        dataStore.edit { it[Keys.SEND_WITH_CTRL_ENTER] = value }
+    }
 
     suspend fun setCoreLogEnabled(enabled: Boolean) {
         dataStore.edit { it[Keys.CORE_LOG_ENABLED] = enabled }

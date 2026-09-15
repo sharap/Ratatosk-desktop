@@ -128,6 +128,10 @@ fun SettingsScreen(
                             onToggleName = { viewModel.setNotificationsShowName(it) },
                             onToggleText = { viewModel.setNotificationsShowText(it) }
                         )
+                        Spacer(modifier = Modifier.height(24.dp))
+                        HorizontalDivider()
+                        Spacer(modifier = Modifier.height(24.dp))
+                        MessagesSection(viewModel)
                     }
 
                     Column(
@@ -200,6 +204,8 @@ fun SettingsScreen(
                         onToggleName = { viewModel.setNotificationsShowName(it) },
                         onToggleText = { viewModel.setNotificationsShowText(it) }
                     )
+                    HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
+                    MessagesSection(viewModel)
                     HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
                     StorageSection(
                         viewModel = viewModel,
@@ -379,6 +385,25 @@ fun TransportsSection(
                 }
             }
         )
+    }
+}
+
+/** Как отправлять: Enter или Ctrl+Enter. */
+@Composable
+fun MessagesSection(viewModel: RatatoskViewModel) {
+    val ctrlEnter by viewModel.sendWithCtrlEnter.collectAsState()
+    Column {
+        Text(text = Strings.SETTINGS_MESSAGES, style = MaterialTheme.typography.titleMedium)
+        Row(
+            modifier = Modifier.fillMaxWidth().clickable { viewModel.setSendWithCtrlEnter(!ctrlEnter) }.padding(vertical = 8.dp),
+            horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(Modifier.weight(1f)) {
+                Text(Strings.SETTINGS_CTRL_ENTER)
+                Text(Strings.SETTINGS_CTRL_ENTER_DESC, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            Switch(checked = ctrlEnter, onCheckedChange = { viewModel.setSendWithCtrlEnter(it) })
+        }
     }
 }
 
