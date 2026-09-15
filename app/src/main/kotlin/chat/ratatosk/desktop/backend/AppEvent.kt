@@ -49,6 +49,12 @@ sealed interface AppEvent {
     data class FileProgress(val fileId: ByteArray, val fraction: Float) : AppEvent
     data class PreviewLoaded(val fileId: ByteArray, val bytes: ByteArray?) : AppEvent
 
+    // --- Только полный клиент: сопряжение второго экрана (§13.4) ----------
+    /** Ссылка сопряжения — показать сразу: второго показа не будет. */
+    data class PairingReady(val deviceId: ByteArray, val uri: String) : AppEvent
+    data class PairingRevoked(val deviceId: ByteArray) : AppEvent
+    data class DeviceLink(val deviceId: ByteArray, val connected: Boolean) : AppEvent
+
     // --- Только полный клиент: ступени доставки ---------------------------
     data class TorStatus(val fraction: Float, val note: String, val blocked: String?) : AppEvent
     data class MailAccountReady(val address: String) : AppEvent

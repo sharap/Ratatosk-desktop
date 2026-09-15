@@ -143,6 +143,8 @@ fun SettingsScreen(
                         if (!isCompanionMode) {
                             Spacer(modifier = Modifier.height(24.dp))
                             chat.ratatosk.desktop.ui.backup.BackupSection(viewModel)
+                            Spacer(modifier = Modifier.height(24.dp))
+                            PairedDevicesSection(viewModel)
                         }
                         Spacer(modifier = Modifier.height(24.dp))
                         HorizontalDivider()
@@ -204,6 +206,8 @@ fun SettingsScreen(
                     if (!isCompanionMode) {
                         HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
                         chat.ratatosk.desktop.ui.backup.BackupSection(viewModel)
+                        HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
+                        PairedDevicesSection(viewModel)
                     }
                     HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
                     ThemeSection(

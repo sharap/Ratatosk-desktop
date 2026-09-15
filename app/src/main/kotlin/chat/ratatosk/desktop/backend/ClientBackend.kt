@@ -84,6 +84,9 @@ class ClientBackend(val client: RatatoskClient) : Backend {
             is FfiEvent.MailAccountFailed -> emit(AppEvent.MailAccountFailed(event.reason))
             is FfiEvent.MailLoginFailed -> emit(AppEvent.MailLoginFailed(event.reason))
             is FfiEvent.CommandRefused -> emit(AppEvent.Refused(event.reason))
+            is FfiEvent.PairingReady -> emit(AppEvent.PairingReady(event.deviceId, event.uri))
+            is FfiEvent.PairingRevoked -> emit(AppEvent.PairingRevoked(event.deviceId))
+            is FfiEvent.DeviceLink -> emit(AppEvent.DeviceLink(event.deviceId, event.connected))
             else -> {}
         }
     }
