@@ -12,6 +12,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.launch
 import org.junit.After
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
@@ -144,6 +145,59 @@ class ModelsWithFakeBackendTest {
         groups.leaveGroup(chatB)
         waitUntil { backend.calls.contains("leave") && backend.calls.contains("evict:${chatA.toHexString()}") }
         waitUntil { backend.calls.contains("requestHistory:${chatB.toHexString()}:100") }
+    }
+
+    @Test
+    fun notificationsForCompanionMessagesAndReactions() {
+        val contacts = ContactsModel(session)
+        val groups = GroupsModel(session)
+        val chats = ChatsModel(session)
+        val notifications = NotificationsModel(session, contacts, groups, chats)
+        val requests = Collections.synchronizedList(mutableListOf<NotificationRequest>())
+        scope.launch { notifications.notificationRequests.collect { requests += it } }
+
+        contacts.onEvent(AppEvent.ChatsLoaded(listOf(contact(chatA, ikA)), emptyList(), fresh = true))
+        val mineMsg = message(msg1).copy(mine = true, body = "моё")
+        notifications.onEvent(AppEvent.HistoryLoaded(chatA, listOf(mineMsg), fresh = true))
+
+        // Своё сообщение — молчим; чужое — уведомляем, с именем чата и превью.
+        notifications.onEvent(AppEvent.MessageArrived(chatA, ByteArray(16) { 5 }, message(ByteArray(16) { 5 }).copy(mine = true)))
+        notifications.onEvent(AppEvent.MessageArrived(chatA, ByteArray(16) { 6 }, message(ByteArray(16) { 6 }).copy(body = "**привет**")))
+        waitUntil { requests.size == 1 }
+        assertEquals("A", requests[0].title)
+        assertEquals("привет", requests[0].body)
+
+        // Повтор того же события — не новое уведомление.
+        notifications.onEvent(AppEvent.MessageArrived(chatA, ByteArray(16) { 6 }, message(ByteArray(16) { 6 })))
+        // Второе сообщение того же чата — «+1 ещё».
+        notifications.onEvent(AppEvent.MessageArrived(chatA, ByteArray(16) { 7 }, message(ByteArray(16) { 7 }).copy(body = "ещё")))
+        waitUntil { requests.size == 2 }
+        assertEquals("ещё\n+1 ещё", requests[1].body)
+        assertEquals(requests[0].key, requests[1].key)
+
+        // Реакция компаньона на моё сообщение: новая чужая — уведомляем.
+        notifications.onEvent(AppEvent.ReactionsChanged(chatA, msg1, null, listOf("👍" to false)))
+        waitUntil { requests.size == 3 }
+        assertEquals("👍 на: моё", requests[2].body)
+    }
+
+    @Test
+    fun noNotificationWhenChatIsOpenInFocusedWindow() {
+        val contacts = ContactsModel(session)
+        val chats = ChatsModel(session)
+        val notifications = NotificationsModel(session, contacts, GroupsModel(session), chats)
+        val requests = Collections.synchronizedList(mutableListOf<NotificationRequest>())
+        scope.launch { notifications.notificationRequests.collect { requests += it } }
+
+        chats.setActiveChat(chatA)
+        notifications.setWindowFocused(true)
+        notifications.onEvent(AppEvent.MessageArrived(chatA, ByteArray(16) { 6 }, message(ByteArray(16) { 6 })))
+        // Другой чат в том же окне — уведомляем.
+        notifications.onEvent(AppEvent.MessageArrived(chatB, ByteArray(16) { 7 }, message(ByteArray(16) { 7 })))
+        waitUntil { requests.size == 1 }
+        Thread.sleep(50)
+        assertEquals(1, requests.size)
+        assertTrue(requests[0].chatId.contentEquals(chatB))
     }
 
     // --- Подставной Backend ------------------------------------------------

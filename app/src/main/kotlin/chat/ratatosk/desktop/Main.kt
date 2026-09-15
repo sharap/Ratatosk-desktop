@@ -9,7 +9,6 @@ import androidx.compose.ui.window.Tray
 import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.application
 import androidx.compose.ui.window.rememberTrayState
-import chat.ratatosk.desktop.core.RatatoskCore
 import chat.ratatosk.desktop.data.SettingsRepository
 import chat.ratatosk.desktop.ui.RatatoskViewModel
 import chat.ratatosk.desktop.ui.Strings
@@ -18,7 +17,9 @@ import chat.ratatosk.desktop.ui.onboarding.OnboardingScreen
 import chat.ratatosk.desktop.ui.unlock.AccountSelectionScreen
 import chat.ratatosk.desktop.ui.unlock.UnlockScreen
 import chat.ratatosk.desktop.ui.main.MainScreen
-import org.ratatosk.core.FfiEvent
+import chat.ratatosk.desktop.util.DesktopNotifier
+import chat.ratatosk.desktop.util.NotificationIcon
+import chat.ratatosk.desktop.util.TrayNotifier
 
 fun main() = application {
     val settingsRepository = remember { SettingsRepository() }
@@ -31,34 +32,34 @@ fun main() = application {
     val chatTheme by viewModel.chatTheme.collectAsState()
     
     var isWindowVisible by remember { mutableStateOf(true) }
-    val activeChatId by viewModel.activeChatIdFlow.collectAsState()
+    var bringToFront by remember { mutableStateOf(false) }
 
     val trayState = rememberTrayState()
     val icon = painterResource("icon.webp")
 
-    LaunchedEffect(Unit) {
-        RatatoskCore.events.collect { event ->
-            if (event is FfiEvent.MessageReceived) {
-                if (!isWindowVisible || activeChatId?.contentEquals(event.chatId) != true) {
-                    try {
-                        val name = if (viewModel.isCompanionMode.value) {
-                             viewModel.contacts.value.find { it.chatId.contentEquals(event.chatId) }?.let { it.localName ?: it.displayName } ?: "???"
-                        } else {
-                            val client = RatatoskCore.getClient()
-                            val contact = client.contacts().find { it.chatId.contentEquals(event.chatId) }
-                            contact?.localName ?: contact?.displayName ?: "???"
-                        }
-                        
-                        trayState.sendNotification(
-                            androidx.compose.ui.window.Notification(
-                                title = Strings.MESSAGE,
-                                message = name
-                            )
-                        )
-                    } catch (e: Exception) { }
-                }
+    // Уведомления: что сказать — решает модель, как показать — платформа.
+    val notifier = remember(trayState) {
+        DesktopNotifier.create(
+            iconPath = NotificationIcon.path(),
+            openLabel = Strings.NOTIFY_OPEN,
+            fallback = TrayNotifier(trayState),
+        )
+    }
+    LaunchedEffect(notifier) {
+        viewModel.notificationRequests.collect { request ->
+            notifier.show(request.key, request.title, request.body) {
+                isWindowVisible = true
+                bringToFront = true
+                viewModel.setActiveChat(request.chatId)
             }
         }
+    }
+    LaunchedEffect(notifier) {
+        viewModel.notificationDismissals.collect { notifier.dismiss(it) }
+    }
+    // Скрытое в трей окно не видно, даже если фокус формально за ним.
+    LaunchedEffect(isWindowVisible) {
+        if (!isWindowVisible) viewModel.setWindowFocused(false)
     }
 
     Tray(
@@ -82,6 +83,21 @@ fun main() = application {
         visible = isWindowVisible,
         title = Strings.APP_NAME
     ) {
+        DisposableEffect(window) {
+            val listener = object : java.awt.event.WindowFocusListener {
+                override fun windowGainedFocus(e: java.awt.event.WindowEvent?) = viewModel.setWindowFocused(true)
+                override fun windowLostFocus(e: java.awt.event.WindowEvent?) = viewModel.setWindowFocused(false)
+            }
+            window.addWindowFocusListener(listener)
+            onDispose { window.removeWindowFocusListener(listener) }
+        }
+        LaunchedEffect(bringToFront) {
+            if (bringToFront) {
+                window.toFront()
+                window.requestFocus()
+                bringToFront = false
+            }
+        }
         RatatoskTheme(themeColor = chatTheme.themeColor) {
             Surface(modifier = Modifier.fillMaxSize()) {
                 if (!isCoreReady) {

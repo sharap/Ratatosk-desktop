@@ -19,6 +19,7 @@ import chat.ratatosk.desktop.ui.Strings
 import chat.ratatosk.desktop.ui.components.AddContactDialog
 import chat.ratatosk.desktop.ui.components.Avatar
 import chat.ratatosk.desktop.ui.components.CreateGroupDialog
+import chat.ratatosk.desktop.util.MessagePreview
 import chat.ratatosk.desktop.util.toHexString
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -147,7 +148,7 @@ fun ChatListScreen(
                             },
                             supportingContent = {
                                 Text(
-                                    text = lastMessage?.let { if (it.mine) Strings.YOU_PREFIX.format(it.body) else it.body }
+                                    text = lastMessage?.let { MessagePreview.of(it).let { p -> if (it.mine) Strings.YOU_PREFIX.format(p) else p } }
                                         ?: Strings.GROUP_NO_MESSAGES,
                                     maxLines = 1,
                                     overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
@@ -197,11 +198,9 @@ fun ChatListScreen(
                             },
                             supportingContent = { 
                                 if (lastMessage != null) {
-                                    val content = if (lastMessage.mine) {
-                                        Strings.YOU_PREFIX.format(lastMessage.body)
-                                    } else {
-                                        lastMessage.body
-                                    }
+                                    // Разметка снята, у вложения — подпись вместо пустой строки.
+                                    val preview = MessagePreview.of(lastMessage)
+                                    val content = if (lastMessage.mine) Strings.YOU_PREFIX.format(preview) else preview
                                     Text(
                                         text = content,
                                         maxLines = 1,

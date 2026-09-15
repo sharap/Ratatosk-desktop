@@ -167,6 +167,20 @@ object Strings {
     const val DEVICE_LOCAL_ONLY = "Работает, когда устройства в одной сети"
     const val DEVICE_ANYWHERE = "Доступно и вне общей сети"
 
+    // Превью сообщений и уведомления
+    const val PREVIEW_SPOILER = "спойлер"
+    const val PREVIEW_PHOTO = "[фото]"
+    const val PREVIEW_VIDEO = "[видео]"
+    const val PREVIEW_AUDIO = "[аудио]"
+    const val PREVIEW_FILE = "[файл]"
+    const val PREVIEW_CONTACT = "[контакт]"
+    const val PREVIEW_EMPTY = "[сообщение]"
+    const val NOTIFY_NEW_MESSAGE = "Новое сообщение"
+    const val NOTIFY_MORE = "%s\n+%d ещё"
+    const val NOTIFY_REACTION_TO = "%s на: %s"
+    const val NOTIFY_REACTION = "Реакция %s"
+    const val NOTIFY_OPEN = "Открыть"
+
     // Резервная копия
     const val BACKUP = "Резервная копия"
     const val BACKUP_DESC = "Единственный способ перенести переписку на другое устройство: синхронизации и облака нет."

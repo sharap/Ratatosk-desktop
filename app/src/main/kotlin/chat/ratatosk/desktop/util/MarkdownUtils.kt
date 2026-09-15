@@ -36,6 +36,45 @@ object MarkdownUtils {
         }
     }
 
+    /**
+     * Разметка в одну строку простого текста — для уведомлений и превью
+     * в списке чатов.
+     *
+     * Разбирается **тем же парсером**, что и переписка, а не регулярками:
+     * иначе в уведомление уезжают обратные кавычки, `[текст](адрес)`,
+     * заголовки и цитаты. Код остаётся содержимым, ссылка — подписью,
+     * переносы и границы блоков становятся пробелами. Спойлер не
+     * раскрывается: вместо него — [spoilerPlaceholder].
+     */
+    fun toPlainText(text: String, spoilerPlaceholder: String): String {
+        if (text.isBlank()) return ""
+        val processed = text.replace(Regex("\\|\\|(.+?)\\|\\|"), "[$spoilerPlaceholder]")
+        val builder = StringBuilder()
+        parser.parse(processed).accept(PlainTextVisitor(builder))
+        return builder.toString().replace(Regex("\\s+"), " ").trim()
+    }
+
+    private class PlainTextVisitor(private val out: StringBuilder) : AbstractVisitor() {
+        private fun spaced(node: Node) {
+            visitChildren(node)
+            out.append(' ')
+        }
+
+        override fun visit(text: Text) { out.append(text.literal) }
+        override fun visit(code: Code) { out.append(code.literal) }
+        override fun visit(fencedCodeBlock: FencedCodeBlock) { out.append(fencedCodeBlock.literal).append(' ') }
+        override fun visit(indentedCodeBlock: IndentedCodeBlock) { out.append(indentedCodeBlock.literal).append(' ') }
+        override fun visit(softLineBreak: SoftLineBreak) { out.append(' ') }
+        override fun visit(hardLineBreak: HardLineBreak) { out.append(' ') }
+        override fun visit(thematicBreak: ThematicBreak) { out.append(' ') }
+        override fun visit(paragraph: Paragraph) = spaced(paragraph)
+        override fun visit(heading: Heading) = spaced(heading)
+        override fun visit(blockQuote: BlockQuote) = spaced(blockQuote)
+        override fun visit(listItem: ListItem) = spaced(listItem)
+        override fun visit(link: Link) { visitChildren(link) }
+        override fun visit(image: Image) { visitChildren(image) }
+    }
+
     private class ComposeAnnotatedStringVisitor(
         private val builder: AnnotatedString.Builder,
         private val linkColor: Color

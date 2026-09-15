@@ -80,11 +80,15 @@ class CompanionBackend(val companion: RatatoskCompanion) : Backend {
 
             is FfiCompanionEvent.History ->
                 emit(AppEvent.HistoryLoaded(event.chatId, event.page.map { mapCompanionMessage(it) }, event.fresh))
-            is FfiCompanionEvent.Arrived -> emit(AppEvent.MessageArrived(event.message.chatId, event.message.msgId))
+            is FfiCompanionEvent.Arrived ->
+                emit(AppEvent.MessageArrived(event.message.chatId, event.message.msgId, mapCompanionMessage(event.message)))
             is FfiCompanionEvent.StatusChanged -> emit(AppEvent.StatusChanged(event.msgId, event.status))
             is FfiCompanionEvent.Gone -> emit(AppEvent.MessagesChanged(event.chatId))
             is FfiCompanionEvent.Edited -> emit(AppEvent.MessagesChanged(event.message.chatId))
-            is FfiCompanionEvent.Reacted -> emit(AppEvent.MessagesChanged(event.chatId))
+            is FfiCompanionEvent.Reacted -> {
+                emit(AppEvent.MessagesChanged(event.chatId))
+                emit(AppEvent.ReactionsChanged(event.chatId, event.msgId, null, event.reactions.map { it.emoji to it.mine }))
+            }
 
             is FfiCompanionEvent.FileProgress -> {
                 val fraction = if (event.chunkTotal > 0UL) event.haveChunks.toFloat() / event.chunkTotal.toFloat() else 0f

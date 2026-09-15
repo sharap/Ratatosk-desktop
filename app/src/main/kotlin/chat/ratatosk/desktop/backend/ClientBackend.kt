@@ -13,6 +13,7 @@ import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.plus
 import kotlinx.coroutines.withContext
 import org.ratatosk.core.FfiEvent
 import org.ratatosk.core.FfiFile
@@ -39,7 +40,8 @@ class ClientBackend(val client: RatatoskClient) : Backend {
     }
 
     override fun start(scope: CoroutineScope) {
-        job = RatatoskCore.events.onEach { translate(it) }.launchIn(scope)
+        // Перевод зовёт ядро (контакты по ключу) — не на UI-потоке.
+        job = RatatoskCore.events.onEach { translate(it) }.launchIn(scope + Dispatchers.IO)
     }
 
     override fun close() {
@@ -52,7 +54,10 @@ class ClientBackend(val client: RatatoskClient) : Backend {
             is FfiEvent.MessageReceived -> emit(AppEvent.MessageArrived(event.chatId, event.msgId))
             is FfiEvent.StatusChanged -> emit(AppEvent.StatusChanged(event.msgId, event.status))
             is FfiEvent.MessageEdited -> emit(AppEvent.MessagesChanged(event.chatId))
-            is FfiEvent.ReactionChanged -> emit(AppEvent.MessagesChanged(event.chatId))
+            is FfiEvent.ReactionChanged -> {
+                emit(AppEvent.MessagesChanged(event.chatId))
+                emit(AppEvent.ReactionsChanged(event.chatId, event.msgId, event.authorIk, null))
+            }
             is FfiEvent.MessagesDeleted -> emit(AppEvent.MessagesChanged(event.chatId))
             is FfiEvent.ContactAdded, is FfiEvent.ContactChanged, is FfiEvent.ContactRemoved -> emit(AppEvent.ChatsChanged)
             is FfiEvent.GroupCreated -> {

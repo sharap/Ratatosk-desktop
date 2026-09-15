@@ -31,9 +31,10 @@ class AppModels(settings: SettingsRepository, scope: CoroutineScope) : SessionLi
     val nostr = NostrModel(session, transports)
     val accounts = AccountsModel(session, lifecycle = this)
     val pairing = PairingModel(session)
+    val notifications = NotificationsModel(session, contacts, groups, chats)
     val backup = BackupModel(session, onAccountsChanged = { accounts.refreshAccounts() })
 
-    private val features: List<FeatureModel> = listOf(preferences, contacts, chats, files, transports, groups, yggdrasil, nostr, accounts, backup, pairing)
+    private val features: List<FeatureModel> = listOf(preferences, contacts, chats, files, transports, groups, yggdrasil, nostr, accounts, backup, pairing, notifications)
 
     private var eventsJob: Job? = null
 

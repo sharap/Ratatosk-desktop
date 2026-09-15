@@ -40,7 +40,18 @@ sealed interface AppEvent {
     // --- Переписка --------------------------------------------------------
     /** Последние сообщения чата — заменяют показанные. */
     data class HistoryLoaded(val chatId: ByteArray, val messages: List<FfiMessage>, val fresh: Boolean) : AppEvent
-    data class MessageArrived(val chatId: ByteArray, val msgId: ByteArray) : AppEvent
+    /** Новое сообщение. [message] — если оно уже есть на руках (компаньон присылает его сразу). */
+    data class MessageArrived(val chatId: ByteArray, val msgId: ByteArray, val message: FfiMessage? = null) : AppEvent
+    /**
+     * Реакции на сообщение изменились. Клиент знает автора ([authorIk]),
+     * компаньон — только список целиком ([reactions]: смайлик и «моя ли»).
+     */
+    data class ReactionsChanged(
+        val chatId: ByteArray,
+        val msgId: ByteArray,
+        val authorIk: ByteArray?,
+        val reactions: List<Pair<String, Boolean>>?,
+    ) : AppEvent
     /** Сообщения чата изменились (правка, реакция, удаление, своя отправка) — перечитать. */
     data class MessagesChanged(val chatId: ByteArray) : AppEvent
     data class StatusChanged(val msgId: ByteArray, val status: FfiDeliveryStatus) : AppEvent
