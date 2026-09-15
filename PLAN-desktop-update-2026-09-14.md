@@ -166,6 +166,12 @@ Android-эталон — полный узел.
   в обоих `Backend`; минимальный UI — группы в списке чатов, создание с `groupJoinNotice`, экран группы
   (состав, пригласить, исключить с `evictionNotice`, переименовать, выйти с `leaveNotice` и
   `ownerLeaveNotice`), вышедшая группа — архив только для чтения с «Очистить чат».
+* 3.4 — Yggdrasil и Nostr (закрывает 6.2 и 6.3): `YggdrasilModel`, `NostrModel`, разделы настроек.
+  Меш — один выбор на три положения, режим и ступень меняются вместе; тексты ядра по переходу
+  (`yggWarning`, `yggNodeNotice`, `yggNodeStopNotice`; `nostrWarning` + `nostrNoFilesNotice`;
+  `nostrDirectWarning`). Живые пиры и реле опрашиваются раз в 3 с, только пока раздел на экране.
+  Ввод проверяется до вызова (ядро молча отбрасывает негодные реле). Ключ внешнего демона можно
+  взять кнопкой у `yggdrasilctl -json getSelf`; адрес для сверки считает ядро.
 
 Рекомендуемый подход: **не копировать 2771 строку одним файлом**, а сразу разрезать VM
 по фичам (`ChatsViewModel`/`MessagesDelegate`, `GroupsDelegate`, `TransportsDelegate`,

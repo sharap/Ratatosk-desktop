@@ -27,9 +27,11 @@ class AppModels(settings: SettingsRepository, scope: CoroutineScope) : SessionLi
     val files = FilesModel(session)
     val transports = TransportsModel(session)
     val groups = GroupsModel(session)
+    val yggdrasil = YggdrasilModel(session, transports)
+    val nostr = NostrModel(session, transports)
     val accounts = AccountsModel(session, lifecycle = this)
 
-    private val features: List<FeatureModel> = listOf(preferences, contacts, chats, files, transports, groups, accounts)
+    private val features: List<FeatureModel> = listOf(preferences, contacts, chats, files, transports, groups, yggdrasil, nostr, accounts)
 
     private var eventsJob: Job? = null
 
@@ -72,6 +74,8 @@ class AppModels(settings: SettingsRepository, scope: CoroutineScope) : SessionLi
         contacts.onSessionStarted()
         files.onSessionStarted()
         transports.refreshTransportStatus()
+        yggdrasil.refresh()
+        nostr.refresh()
     }
 
     private fun dispatch(event: AppEvent) {

@@ -16,4 +16,12 @@ class NativeLibraryTest {
         println("JNA resource prefix: ${com.sun.jna.Platform.RESOURCE_PREFIX}")
         assertTrue(org.ratatosk.core.noPinWarning().isNotBlank())
     }
+
+    @Test
+    fun yggAddressIsDerivedByCore() {
+        val address = org.ratatosk.core.yggAddress(ByteArray(32) { 0x11 })
+        println("ygg address for 0x11…: $address")
+        assertTrue(address != null && address.startsWith("2"))
+        assertTrue(org.ratatosk.core.yggAddress(ByteArray(0)) == null)
+    }
 }

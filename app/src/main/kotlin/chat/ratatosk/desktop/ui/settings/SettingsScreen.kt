@@ -114,6 +114,8 @@ fun SettingsScreen(
                                 onShowMailSetup = { showMailSetup = true },
                                 onShowMailDelete = { showMailDeleteConfirm = true }
                             )
+                            YggdrasilSection(viewModel)
+                            NostrSection(viewModel)
                             Spacer(modifier = Modifier.height(24.dp))
                             HorizontalDivider()
                             Spacer(modifier = Modifier.height(24.dp))
@@ -177,6 +179,8 @@ fun SettingsScreen(
                             onShowMailSetup = { showMailSetup = true },
                             onShowMailDelete = { showMailDeleteConfirm = true }
                         )
+                        YggdrasilSection(viewModel)
+                        NostrSection(viewModel)
                         HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
                     }
 
