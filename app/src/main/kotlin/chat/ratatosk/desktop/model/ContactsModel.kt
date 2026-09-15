@@ -2,6 +2,7 @@ package chat.ratatosk.desktop.model
 
 import chat.ratatosk.desktop.backend.AppEvent
 import chat.ratatosk.desktop.util.ClipboardUtils
+import chat.ratatosk.desktop.util.Log
 import chat.ratatosk.desktop.util.toHexString
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -60,6 +61,9 @@ class ContactsModel(session: SessionContext) : FeatureModel(session), ContactsAp
 
     /** Чьи лица уже запрошены: без этого экран спрашивал бы ядро на каждой перерисовке. */
     private val avatarRequests = ConcurrentHashMap.newKeySet<String>()
+
+    /** Последние отметки лиц по `chatId`: сменилась — запрос выше больше не действителен. */
+    private var avatarStamps: Map<String, String> = emptyMap()
 
     private val _fingerprint = MutableStateFlow<String?>(null)
     override val fingerprint = _fingerprint.asStateFlow()
@@ -194,10 +198,23 @@ class ContactsModel(session: SessionContext) : FeatureModel(session), ContactsAp
         when (event) {
             is AppEvent.ChatsLoaded -> {
                 _contacts.value = event.chats
+                val changed = event.avatarStamps.filter { (chatHex, stamp) -> avatarStamps[chatHex] != stamp }.keys
+                avatarStamps = event.avatarStamps
+                event.chats.filter { it.chatId.toHexString() in changed }.forEach { contact ->
+                    val ikHex = contact.peerIk.toHexString()
+                    // Спрашивали раньше — спросить снова: старый ответ устарел.
+                    if (avatarRequests.remove(ikHex) || _contactAvatars.value.containsKey(ikHex)) {
+                        Log.d(TAG, "avatar stamp changed, re-requesting")
+                        avatarRequests.add(ikHex)
+                        val chatId = contact.chatId
+                        session.io { it.requestAvatar(chatId) }
+                    }
+                }
                 if (session.backend?.isCompanion == true) session._isCompanionFresh.value = event.fresh
             }
             is AppEvent.ChatsChanged, is AppEvent.MessageArrived -> refreshContacts()
             is AppEvent.AvatarLoaded -> {
+                Log.d(TAG, "avatar loaded: ${if (event.chatId == null) "own" else "chat"}, ${event.bytes?.size ?: 0} bytes")
                 val chatId = event.chatId
                 if (chatId == null) {
                     _myAvatar.value = event.bytes
@@ -208,6 +225,7 @@ class ContactsModel(session: SessionContext) : FeatureModel(session), ContactsAp
                 }
             }
             is AppEvent.AvatarChanged -> {
+                Log.d(TAG, "avatar changed: ${if (event.chatId == null) "own" else "chat"}")
                 val chatId = event.chatId
                 if (chatId != null) peerIkHexOf(chatId)?.let { avatarRequests.remove(it) }
                 session.io { it.requestAvatar(chatId) }
@@ -222,6 +240,11 @@ class ContactsModel(session: SessionContext) : FeatureModel(session), ContactsAp
         _myAvatar.value = null
         _contactAvatars.value = emptyMap()
         avatarRequests.clear()
+        avatarStamps = emptyMap()
         _myContactUri.value = null
+    }
+
+    private companion object {
+        const val TAG = "ContactsModel"
     }
 }

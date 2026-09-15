@@ -104,6 +104,27 @@ class ModelsWithFakeBackendTest {
     }
 
     @Test
+    fun avatarIsRequestedAgainWhenItsStampChanges() {
+        val contacts = ContactsModel(session)
+        val hex = chatA.toHexString()
+        contacts.onEvent(AppEvent.ChatsLoaded(listOf(contact(chatA, ikA)), emptyList(), true, mapOf(hex to "false:false")))
+        assertNull(contacts.getAvatarOf(ikA))
+        waitUntil { backend.calls.count { it.startsWith("requestAvatar") } == 1 }
+        // Лица не было (несверенный контакт) — ответ пустой.
+        contacts.onEvent(AppEvent.AvatarLoaded(chatA, null))
+        // Тот же список — запроса нет.
+        contacts.onEvent(AppEvent.ChatsLoaded(listOf(contact(chatA, ikA)), emptyList(), true, mapOf(hex to "false:false")))
+        Thread.sleep(50)
+        assertEquals(1, backend.calls.count { it.startsWith("requestAvatar") })
+        // Контакт сверили, лицо стало видно — без события о лице спрашиваем снова.
+        contacts.onEvent(AppEvent.ChatsLoaded(listOf(contact(chatA, ikA)), emptyList(), true, mapOf(hex to "true:true")))
+        waitUntil { backend.calls.count { it.startsWith("requestAvatar") } == 2 }
+        val face = byteArrayOf(7)
+        contacts.onEvent(AppEvent.AvatarLoaded(chatA, face))
+        assertArrayEquals(face, contacts.getAvatarOf(ikA))
+    }
+
+    @Test
     fun clientOnlyFeaturesAreQuietInCompanionMode() {
         val contacts = ContactsModel(session)
         contacts.markVerified(ikA)
@@ -247,7 +268,7 @@ class ModelsWithFakeBackendTest {
 
         fun contact(chatId: ByteArray, peerIk: ByteArray) = FfiContact(
             peerIk = peerIk, chatId = chatId, fingerprint = "", displayName = "A", localName = null,
-            verified = false, seenOnLan = false, hasAvatar = false, onion = null, chatmail = null,
+            verified = false, seenOnLan = false, seenOnBt = false, hasAvatar = false, onion = null, chatmail = null,
             cardVersion = 0UL, addedMs = 0UL, reachability = FfiReachability(emptyList(), null, null),
             directChannel = null, anomalies = FfiAnomalies(0UL, 0UL, 0UL, 0UL, 0UL), ygg = null, nostrRelays = emptyList(),
         )

@@ -2,6 +2,7 @@ package chat.ratatosk.desktop.backend
 
 import chat.ratatosk.desktop.core.RatatoskCore
 import chat.ratatosk.desktop.util.Log
+import chat.ratatosk.desktop.util.toHexString
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -99,7 +100,10 @@ class ClientBackend(val client: RatatoskClient) : Backend {
     // --- Чаты и лица ------------------------------------------------------
 
     override fun requestChats() {
-        emit(AppEvent.ChatsLoaded(client.contacts(), client.groups().map { it.toGroup() }, fresh = true))
+        val contacts = client.contacts()
+        // У клиента лицо видно, когда оно есть и контакт сверен (§4.2).
+        val stamps = contacts.associate { it.chatId.toHexString() to "${it.hasAvatar}:${it.verified}" }
+        emit(AppEvent.ChatsLoaded(contacts, client.groups().map { it.toGroup() }, fresh = true, avatarStamps = stamps))
     }
 
     // Создатель, ушедший из группы, остаётся создателем — но распоряжаться

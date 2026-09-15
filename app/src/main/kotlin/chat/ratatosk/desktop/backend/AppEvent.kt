@@ -21,8 +21,19 @@ sealed interface AppEvent {
     data class Refused(val reason: String) : AppEvent
 
     // --- Список чатов и лица ---------------------------------------------
-    /** Список чатов целиком: личные и группы. [fresh] ложно, пока показан снимок из кэша. */
-    data class ChatsLoaded(val chats: List<FfiContact>, val groups: List<Group>, val fresh: Boolean) : AppEvent
+    /**
+     * Список чатов целиком: личные и группы. [fresh] ложно, пока показан снимок из кэша.
+     *
+     * [avatarStamps] — отметка лица по `chatId` в hex: изменилась — лицо надо
+     * перечитать, даже если отдельного события о нём не было (лицо несверенного
+     * контакта ядро не отдаёт, и после сверки приходит смена контакта, а не лица).
+     */
+    data class ChatsLoaded(
+        val chats: List<FfiContact>,
+        val groups: List<Group>,
+        val fresh: Boolean,
+        val avatarStamps: Map<String, String> = emptyMap(),
+    ) : AppEvent
     /** Список устарел — перезапросить. */
     data object ChatsChanged : AppEvent
     /** Лицо чата; `chatId == null` — своё. `bytes == null` — лица нет. */

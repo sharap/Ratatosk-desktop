@@ -65,7 +65,9 @@ class CompanionBackend(val companion: RatatoskCompanion) : Backend {
 
             is FfiCompanionEvent.Chats -> {
                 val (groups, personal) = event.chats.partition { it.isGroup }
-                emit(AppEvent.ChatsLoaded(personal.map { mapCompanionChat(it) }, groups.map { mapCompanionGroup(it) }, event.fresh))
+                // У компаньона момент смены лица приходит прямо в списке.
+                val stamps = personal.associate { it.chatId.toHexString() to it.avatarMs.toString() }
+                emit(AppEvent.ChatsLoaded(personal.map { mapCompanionChat(it) }, groups.map { mapCompanionGroup(it) }, event.fresh, stamps))
             }
             is FfiCompanionEvent.Members -> emit(AppEvent.MembersLoaded(event.chatId, event.members.map {
                 GroupMember(chatId = it.chatId, name = it.name, isMe = it.mine, isOwner = it.owner)
