@@ -449,3 +449,72 @@ private fun ListEditDialog(
         dismissButton = { TextButton(onClick = onDismiss) { Text(Strings.CANCEL) } }
     )
 }
+
+/**
+ * Эфир Bluetooth. Раздел есть, только если у ядра есть радио: на Linux
+ * со сборкой `bt` оно своё (BlueZ), вне Linux эфира нет вовсе — и выключатель,
+ * который ничего не включает, показывать незачем.
+ */
+@Composable
+fun BluetoothSection(viewModel: RatatoskViewModel) {
+    val hasRadio by viewModel.btHasRadio.collectAsState()
+    val enabled by viewModel.btEnabled.collectAsState()
+    val ready by viewModel.transportsReady.collectAsState()
+    var confirmEnable by remember { mutableStateOf(false) }
+
+    if (!hasRadio) return
+    val up = ready[FfiTransport.BT] == true
+
+    Card(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    TitleWithDot(Strings.BT_TRANSPORT, up)
+                    Text(Strings.BT_DESC, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                Switch(checked = enabled, onCheckedChange = { on ->
+                    if (on) confirmEnable = true else viewModel.setTransportEnabled(FfiTransport.BT, false)
+                })
+            }
+            // «Включено» и «работает» — разные вещи; причину ядро на Linux не называет.
+            if (enabled && !up) {
+                Spacer(Modifier.height(4.dp))
+                Text(Strings.BT_NOT_UP, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.outline)
+            }
+        }
+    }
+
+    if (confirmEnable) {
+        ConfirmTexts(
+            title = Strings.BT_TRANSPORT,
+            texts = listOf(Strings.BT_WARNING),
+            confirmLabel = Strings.ENABLE,
+            onDismiss = { confirmEnable = false },
+            onConfirm = {
+                viewModel.setTransportEnabled(FfiTransport.BT, true)
+                confirmEnable = false
+            }
+        )
+    }
+}
+
+/** Журнал ядра — для разбора неполадок; настройка процесса, действует со следующего запуска. */
+@Composable
+fun DiagnosticsSection(viewModel: RatatoskViewModel) {
+    val logEnabled by viewModel.coreLogEnabled.collectAsState()
+    Column {
+        Text(Strings.DIAGNOSTICS, style = MaterialTheme.typography.titleMedium)
+        Spacer(Modifier.height(8.dp))
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text(Strings.CORE_LOG, style = MaterialTheme.typography.bodyLarge)
+                Text(Strings.CORE_LOG_DESC, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            Switch(checked = logEnabled, onCheckedChange = { viewModel.setCoreLogEnabled(it) })
+        }
+        val file = chat.ratatosk.desktop.util.CoreLog.file()
+        if (file.exists()) {
+            TextButton(onClick = { chat.ratatosk.desktop.util.FileUtils.openDirectory(file) }) { Text(Strings.CORE_LOG_SHOW) }
+        }
+    }
+}

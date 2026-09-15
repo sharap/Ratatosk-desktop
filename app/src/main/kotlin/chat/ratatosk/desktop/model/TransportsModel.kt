@@ -23,6 +23,9 @@ interface TransportsApi {
     val lanEnabled: StateFlow<Boolean>
     val torEnabled: StateFlow<Boolean>
     val mailEnabled: StateFlow<Boolean>
+    val btEnabled: StateFlow<Boolean>
+    /** Есть ли у ядра чем поднять эфир Bluetooth; нет — раздела не показываем. */
+    val btHasRadio: StateFlow<Boolean>
     val onionAddress: StateFlow<String?>
     val cardVersion: StateFlow<ULong?>
     fun refreshTransportStatus()
@@ -59,6 +62,12 @@ class TransportsModel(session: SessionContext) : FeatureModel(session), Transpor
     override val mailEnabled = transportsEnabled.map { it[FfiTransport.MAIL] ?: false }
         .stateIn(scope, SharingStarted.WhileSubscribed(5000), false)
 
+    override val btEnabled = transportsEnabled.map { it[FfiTransport.BT] ?: false }
+        .stateIn(scope, SharingStarted.WhileSubscribed(5000), false)
+
+    private val _btHasRadio = MutableStateFlow(false)
+    override val btHasRadio = _btHasRadio.asStateFlow()
+
     private val _onionAddress = MutableStateFlow<String?>(null)
     override val onionAddress = _onionAddress.asStateFlow()
 
@@ -74,6 +83,8 @@ class TransportsModel(session: SessionContext) : FeatureModel(session), Transpor
             val ts = client.torStatus()
             val ms = client.mailStatus()
             val ma = client.mailAccount()
+            // На Linux со сборкой `bt` радио у ядра своё (BlueZ), вручать его не нужно.
+            val radio = runCatching { client.bluetooth().use { it.hasRadio() } }.getOrDefault(false)
 
             withContext(Dispatchers.Main) {
                 _transportsEnabled.value = en
@@ -81,6 +92,7 @@ class TransportsModel(session: SessionContext) : FeatureModel(session), Transpor
                 _torStatus.value = ts
                 _mailStatus.value = ms
                 _mailAccount.value = ma
+                _btHasRadio.value = radio
             }
         }
     }
@@ -176,6 +188,7 @@ class TransportsModel(session: SessionContext) : FeatureModel(session), Transpor
         _mailAccount.value = null
         _transportsEnabled.value = emptyMap()
         _transportsReady.value = emptyMap()
+        _btHasRadio.value = false
         // Непустой адрес от прошлого аккаунта не дал бы новому объявить свои.
         _onionAddress.value = null
         _cardVersion.value = null

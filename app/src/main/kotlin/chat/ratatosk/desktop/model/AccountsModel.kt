@@ -98,6 +98,8 @@ class AccountsModel(
 
         scope.launch {
             try {
+                // Журнал ядра — до открытия хранилища: подписчик ставится один раз на процесс.
+                chat.ratatosk.desktop.util.CoreLog.start(settings.coreLogEnabled.first())
                 RatatoskCore.initializeRegistry()
                 refreshAccounts()
             } catch (e: Exception) {

@@ -114,6 +114,7 @@ fun SettingsScreen(
                                 onShowMailSetup = { showMailSetup = true },
                                 onShowMailDelete = { showMailDeleteConfirm = true }
                             )
+                            BluetoothSection(viewModel)
                             YggdrasilSection(viewModel)
                             NostrSection(viewModel)
                             Spacer(modifier = Modifier.height(24.dp))
@@ -156,6 +157,8 @@ fun SettingsScreen(
                         Spacer(modifier = Modifier.height(24.dp))
                         HorizontalDivider()
                         Spacer(modifier = Modifier.height(24.dp))
+                        DiagnosticsSection(viewModel)
+                        HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
                         AccountSection(
                             viewModel = viewModel,
                             isCompanionMode = isCompanionMode
@@ -185,6 +188,7 @@ fun SettingsScreen(
                             onShowMailSetup = { showMailSetup = true },
                             onShowMailDelete = { showMailDeleteConfirm = true }
                         )
+                        BluetoothSection(viewModel)
                         YggdrasilSection(viewModel)
                         NostrSection(viewModel)
                         HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
@@ -214,6 +218,8 @@ fun SettingsScreen(
                         viewModel = viewModel,
                         chatTheme = chatTheme
                     )
+                    HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
+                    DiagnosticsSection(viewModel)
                     HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
                     AccountSection(
                         viewModel = viewModel,

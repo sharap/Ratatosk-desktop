@@ -26,6 +26,20 @@ class PairingCoreTest {
     }
 
     @Test
+    fun linuxBuildHasItsOwnBluetoothRadio() {
+        org.junit.Assume.assumeTrue(System.getProperty("os.name").lowercase().contains("linux"))
+        val registry = AccountRegistry.open(tmp.absolutePath)
+        val client = registry.openAccount(registry.create("bt").id, "1234", null, "Me")
+        try {
+            // Сборка с `bt` берёт радио у BlueZ: вручать нечего, раздел настроек показывается.
+            assertTrue(client.bluetooth().use { it.hasRadio() })
+        } finally {
+            client.destroy()
+            registry.destroy()
+        }
+    }
+
+    @Test
     fun pairListRevoke() {
         val registry = AccountRegistry.open(tmp.absolutePath)
         val account = registry.create("acc")

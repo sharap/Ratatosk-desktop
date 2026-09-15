@@ -21,6 +21,7 @@ class SettingsRepository(
         val BACKGROUND_OPACITY = longPreferencesKey("background_opacity")
         val ACCOUNTS_MAP = stringPreferencesKey("accounts_map")
         val COMPANION_PAIRINGS = stringPreferencesKey("companion_pairings")
+        val CORE_LOG_ENABLED = booleanPreferencesKey("core_log_enabled")
     }
 
     val accountsMap: Flow<Map<String, String>> = dataStore.data.map { preferences ->
@@ -53,6 +54,13 @@ class SettingsRepository(
     fun getNotificationsShowName(accountId: String): Flow<Boolean> = dataStore.data.map { it[booleanPreferencesKey(accountKey(accountId, "notifications_show_name"))] ?: true }
     fun getNotificationsShowText(accountId: String): Flow<Boolean> = dataStore.data.map { it[booleanPreferencesKey(accountKey(accountId, "notifications_show_text"))] ?: true }
     fun getDownloadDirPath(accountId: String): Flow<String?> = dataStore.data.map { it[stringPreferencesKey(accountKey(accountId, "download_dir_path"))] }
+
+    /** Вести ли журнал ядра в файл. Настройка процесса, а не аккаунта. */
+    val coreLogEnabled: Flow<Boolean> = dataStore.data.map { it[Keys.CORE_LOG_ENABLED] ?: false }
+
+    suspend fun setCoreLogEnabled(enabled: Boolean) {
+        dataStore.edit { it[Keys.CORE_LOG_ENABLED] = enabled }
+    }
 
     val chatTheme: Flow<ChatThemeData> = dataStore.data.map { preferences ->
         ChatThemeData(

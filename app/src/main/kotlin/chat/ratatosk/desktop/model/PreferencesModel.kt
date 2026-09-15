@@ -16,6 +16,9 @@ interface PreferencesApi {
     fun updateChatTheme(update: (ChatThemeData) -> ChatThemeData)
     fun setNotificationsShowName(show: Boolean)
     fun setNotificationsShowText(show: Boolean)
+    /** Вести журнал ядра в файл; действует со следующего запуска. */
+    val coreLogEnabled: StateFlow<Boolean>
+    fun setCoreLogEnabled(enabled: Boolean)
 }
 
 /** Тема и уведомления: только настройки приложения, ядро не участвует. */
@@ -56,6 +59,13 @@ class PreferencesModel(session: SessionContext) : FeatureModel(session), Prefere
         scope.launch {
             settings.setNotificationsShowText(id, show)
         }
+    }
+
+    override val coreLogEnabled = settings.coreLogEnabled
+        .stateIn(scope, SharingStarted.Eagerly, false)
+
+    override fun setCoreLogEnabled(enabled: Boolean) {
+        scope.launch { settings.setCoreLogEnabled(enabled) }
     }
 
     override fun reset() {}
