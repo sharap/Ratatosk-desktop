@@ -61,6 +61,7 @@ fun MainScreen(
     val contactAvatars by viewModel.contactAvatars.collectAsState()
 
     val selectedAccount by viewModel.selectedAccount.collectAsState()
+    val myAvatar by viewModel.myAvatar.collectAsState()
     val totalUnreadCount by viewModel.totalUnreadCount.collectAsState()
     val isCompanionMode by viewModel.isCompanionMode.collectAsState()
     var showAddContactDialog by remember { mutableStateOf(false) }
@@ -195,6 +196,7 @@ fun MainScreen(
         Row(Modifier.fillMaxSize()) {
             UnifiedNavigationRail(
                 selectedAccount = selectedAccount,
+                myAvatar = myAvatar,
                 contacts = contacts,
                 contactAvatars = contactAvatars,
                 currentTab = currentTab,
@@ -453,6 +455,7 @@ fun DetailPaneContent(
 @Composable
 fun UnifiedNavigationRail(
     selectedAccount: FfiAccount?,
+    myAvatar: ByteArray?,
     contacts: List<org.ratatosk.core.FfiContact>,
     contactAvatars: Map<String, ByteArray>,
     currentTab: MainTab,
@@ -475,6 +478,7 @@ fun UnifiedNavigationRail(
                 selectedAccount?.let { account ->
                     AccountAvatar(
                         account = account,
+                        avatarBytes = myAvatar,
                         isSelected = currentTab == MainTab.PROFILE,
                         onClick = { onAccountSelect(account) }
                     )
@@ -542,6 +546,7 @@ fun UnifiedNavigationRail(
 @Composable
 fun AccountAvatar(
     account: FfiAccount,
+    avatarBytes: ByteArray?,
     isSelected: Boolean,
     onClick: () -> Unit
 ) {
@@ -554,7 +559,7 @@ fun AccountAvatar(
         contentAlignment = Alignment.Center
     ) {
         Avatar(
-            avatarBytes = null,
+            avatarBytes = avatarBytes,
             name = account.label,
             size = 40.dp
         )
