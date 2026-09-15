@@ -3,6 +3,7 @@ package chat.ratatosk.desktop.ui
 import chat.ratatosk.desktop.data.SettingsRepository
 import chat.ratatosk.desktop.model.AccountsApi
 import chat.ratatosk.desktop.model.AppModels
+import chat.ratatosk.desktop.model.BackupApi
 import chat.ratatosk.desktop.model.ChatsApi
 import chat.ratatosk.desktop.model.ContactsApi
 import chat.ratatosk.desktop.model.FilesApi
@@ -33,6 +34,7 @@ class RatatoskViewModel private constructor(
     GroupsApi by models.groups,
     YggdrasilApi by models.yggdrasil,
     NostrApi by models.nostr,
+    BackupApi by models.backup,
     TransportsApi by models.transports,
     PreferencesApi by models.preferences {
 

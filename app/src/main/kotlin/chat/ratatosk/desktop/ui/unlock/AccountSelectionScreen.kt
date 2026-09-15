@@ -30,6 +30,7 @@ fun AccountSelectionScreen(viewModel: RatatoskViewModel) {
     var showHiddenDialog by remember { mutableStateOf(false) }
     var showCompanionSetup by remember { mutableStateOf(false) }
     var hiddenPin by remember { mutableStateOf("") }
+    var showImport by remember { mutableStateOf(false) }
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
 
@@ -41,6 +42,9 @@ fun AccountSelectionScreen(viewModel: RatatoskViewModel) {
                 actions = {
                     IconButton(onClick = { showCompanionSetup = true }) {
                         Icon(Icons.Default.Devices, contentDescription = Strings.LINK_COMPANION)
+                    }
+                    TextButton(onClick = { showImport = true }) {
+                        Text(Strings.IMPORT_ARCHIVE)
                     }
                     TextButton(onClick = { showHiddenDialog = true }) {
                         Text(Strings.FIND_HIDDEN)
@@ -165,6 +169,11 @@ fun AccountSelectionScreen(viewModel: RatatoskViewModel) {
             }
         )
     }
+
+    if (showImport) {
+        chat.ratatosk.desktop.ui.backup.ImportArchiveFlow(viewModel, onClose = { showImport = false })
+    }
+    chat.ratatosk.desktop.ui.backup.BackupProgressAndResult(viewModel)
 
     if (showCompanionSetup) {
         chat.ratatosk.desktop.ui.onboarding.CompanionSetupDialog(

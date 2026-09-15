@@ -140,6 +140,10 @@ fun SettingsScreen(
                             snackbarHostState = snackbarHostState,
                             scope = scope
                         )
+                        if (!isCompanionMode) {
+                            Spacer(modifier = Modifier.height(24.dp))
+                            chat.ratatosk.desktop.ui.backup.BackupSection(viewModel)
+                        }
                         Spacer(modifier = Modifier.height(24.dp))
                         HorizontalDivider()
                         Spacer(modifier = Modifier.height(24.dp))
@@ -197,6 +201,10 @@ fun SettingsScreen(
                         snackbarHostState = snackbarHostState,
                         scope = scope
                     )
+                    if (!isCompanionMode) {
+                        HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
+                        chat.ratatosk.desktop.ui.backup.BackupSection(viewModel)
+                    }
                     HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
                     ThemeSection(
                         viewModel = viewModel,

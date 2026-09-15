@@ -115,6 +115,35 @@ object RatatoskCore : EventObserver, CompanionObserver {
         return reg.create(label)
     }
 
+    /**
+     * Восстанавливает аккаунт из архива (§12) и вносит его в реестр.
+     *
+     * Каталог вложений — `<id>.files` рядом с `<id>.db`: ядро выводит его из
+     * пути базы именно так, и под другим именем восстановленные файлы при
+     * открытии не нашлись бы (ревью Android, 1.1).
+     */
+    @Throws(RatatoskException::class)
+    fun importArchive(archivePath: String, unlock: org.ratatosk.core.FfiArchiveUnlock, label: String): org.ratatosk.core.FfiImported {
+        val reg = registry ?: throw IllegalStateException("Registry not initialized")
+        val root = File(AppDirs.getBaseDir(), "ratatosk_root").apply { mkdirs() }
+        val accountId = ByteArray(16).also { java.security.SecureRandom().nextBytes(it) }
+        val idHex = accountId.toHexString()
+        val destination = File(root, "$idHex.db")
+        val filesDir = File(root, "$idHex.files")
+        try {
+            val imported = org.ratatosk.core.importArchive(archivePath, unlock, destination.absolutePath, filesDir.absolutePath)
+            reg.adopt(accountId, label)
+            return imported
+        } catch (t: Throwable) {
+            // Не ввезено — не оставлять полуфабрикат, который найдёт перебор скрытых.
+            destination.delete()
+            File(destination.path + "-wal").delete()
+            File(destination.path + "-shm").delete()
+            filesDir.deleteRecursively()
+            throw t
+        }
+    }
+
     fun logout() {
         synchronized(this) {
             registry?.setForeground(null)

@@ -26,6 +26,8 @@ fun OnboardingScreen(viewModel: RatatoskViewModel) {
     
     var showCompanionSetup by remember { mutableStateOf(false) }
     var showNoPinWarning by remember { mutableStateOf(false) }
+    var showImport by remember { mutableStateOf(false) }
+    val backupOp by viewModel.backupOp.collectAsState()
     var bindToDevice by remember { mutableStateOf(false) }
     val secretStoreAvailable by viewModel.secretStoreAvailable.collectAsState()
 
@@ -145,10 +147,15 @@ fun OnboardingScreen(viewModel: RatatoskViewModel) {
 
         Spacer(modifier = Modifier.height(16.dp))
         
-        TextButton(onClick = { showCompanionSetup = true }) {
-            Icon(Icons.Default.Devices, contentDescription = null)
-            Spacer(Modifier.width(8.dp))
-            Text(Strings.LINK_COMPANION)
+        Row {
+            TextButton(onClick = { showCompanionSetup = true }) {
+                Icon(Icons.Default.Devices, contentDescription = null)
+                Spacer(Modifier.width(8.dp))
+                Text(Strings.LINK_COMPANION)
+            }
+            TextButton(onClick = { showImport = true }) {
+                Text(Strings.IMPORT_ARCHIVE)
+            }
         }
 
         Spacer(modifier = Modifier.height(32.dp))
@@ -201,6 +208,24 @@ fun OnboardingScreen(viewModel: RatatoskViewModel) {
                 }
             }
         )
+    }
+
+    if (showImport) {
+        chat.ratatosk.desktop.ui.backup.ImportArchiveFlow(viewModel, onClose = { showImport = false })
+    }
+    chat.ratatosk.desktop.ui.backup.BackupProgressAndResult(viewModel)
+    // Восстановленный аккаунт появился в списке — к выбору и разблокировке его прежним PIN.
+    var importFinished by remember { mutableStateOf(false) }
+    LaunchedEffect(backupOp) {
+        when (backupOp) {
+            is chat.ratatosk.desktop.model.BackupOp.Imported -> importFinished = true
+            // Итог ввоза закрыт — только теперь уходим к выбору аккаунта.
+            chat.ratatosk.desktop.model.BackupOp.Idle -> if (importFinished) {
+                importFinished = false
+                viewModel.setCreatingNewAccount(false)
+            }
+            else -> {}
+        }
     }
 
     if (showCompanionSetup) {

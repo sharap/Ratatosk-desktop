@@ -30,8 +30,9 @@ class AppModels(settings: SettingsRepository, scope: CoroutineScope) : SessionLi
     val yggdrasil = YggdrasilModel(session, transports)
     val nostr = NostrModel(session, transports)
     val accounts = AccountsModel(session, lifecycle = this)
+    val backup = BackupModel(session, onAccountsChanged = { accounts.refreshAccounts() })
 
-    private val features: List<FeatureModel> = listOf(preferences, contacts, chats, files, transports, groups, yggdrasil, nostr, accounts)
+    private val features: List<FeatureModel> = listOf(preferences, contacts, chats, files, transports, groups, yggdrasil, nostr, accounts, backup)
 
     private var eventsJob: Job? = null
 
