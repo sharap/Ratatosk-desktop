@@ -92,7 +92,6 @@ fun ChatScreen(
     var searchQuery by remember { mutableStateOf("") }
 
     LaunchedEffect(chatIdHex) {
-        viewModel.setActiveChat(chatId)
         viewModel.loadMessages(chatId)
     }
 

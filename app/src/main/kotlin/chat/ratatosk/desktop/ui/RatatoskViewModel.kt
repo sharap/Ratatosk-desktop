@@ -8,6 +8,7 @@ import chat.ratatosk.desktop.model.ChatsApi
 import chat.ratatosk.desktop.model.ContactsApi
 import chat.ratatosk.desktop.model.FilesApi
 import chat.ratatosk.desktop.model.GroupsApi
+import chat.ratatosk.desktop.model.NavigationApi
 import chat.ratatosk.desktop.model.NostrApi
 import chat.ratatosk.desktop.model.NotificationsApi
 import chat.ratatosk.desktop.model.PairingApi
@@ -34,6 +35,7 @@ class RatatoskViewModel private constructor(
     ChatsApi by models.chats,
     FilesApi by models.files,
     GroupsApi by models.groups,
+    NavigationApi by models.navigation,
     YggdrasilApi by models.yggdrasil,
     NostrApi by models.nostr,
     BackupApi by models.backup,

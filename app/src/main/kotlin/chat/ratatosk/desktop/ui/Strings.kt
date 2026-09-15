@@ -12,6 +12,7 @@ object Strings {
     const val GENERATE_IDENTITY = "Создать профиль"
     const val DISPLAY_NAME = "Отображаемое имя"
     const val SECURITY_NOTICES = "Важные уведомления безопасности"
+    const val NO_CHAT_SELECTED = "Выберите чат слева"
     const val NO_CHATS = "Нет активных чатов. Нажмите +, чтобы добавить контакт."
     const val NO_CONTACTS = "Список контактов пуст."
     const val ADD_CONTACT = "Добавить контакт"

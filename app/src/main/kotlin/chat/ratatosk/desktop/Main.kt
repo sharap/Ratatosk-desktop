@@ -50,7 +50,7 @@ fun main() = application {
             notifier.show(request.key, request.title, request.body) {
                 isWindowVisible = true
                 bringToFront = true
-                viewModel.setActiveChat(request.chatId)
+                viewModel.openChat(request.chatId)
             }
         }
     }
@@ -109,15 +109,7 @@ fun main() = application {
                         AccountSelectionScreen(viewModel)
                     }
                 } else {
-                    MainScreen(
-                        viewModel = viewModel,
-                        onChatClick = { chatId ->
-                            viewModel.setActiveChat(chatId)
-                        },
-                        onContactClick = { chatId ->
-                            viewModel.setActiveContact(chatId)
-                        }
-                    )
+                    MainScreen(viewModel = viewModel)
                 }
             }
         }

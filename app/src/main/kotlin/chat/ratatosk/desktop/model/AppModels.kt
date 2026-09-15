@@ -24,6 +24,7 @@ class AppModels(settings: SettingsRepository, scope: CoroutineScope) : SessionLi
     val preferences = PreferencesModel(session)
     val contacts = ContactsModel(session)
     val chats = ChatsModel(session)
+    val navigation = NavigationModel(session, onVisibleChat = { chats.setActiveChat(it) })
     val files = FilesModel(session)
     val transports = TransportsModel(session)
     val groups = GroupsModel(session)
@@ -34,7 +35,7 @@ class AppModels(settings: SettingsRepository, scope: CoroutineScope) : SessionLi
     val notifications = NotificationsModel(session, contacts, groups, chats)
     val backup = BackupModel(session, onAccountsChanged = { accounts.refreshAccounts() })
 
-    private val features: List<FeatureModel> = listOf(preferences, contacts, chats, files, transports, groups, yggdrasil, nostr, accounts, backup, pairing, notifications)
+    private val features: List<FeatureModel> = listOf(preferences, contacts, chats, navigation, files, transports, groups, yggdrasil, nostr, accounts, backup, pairing, notifications)
 
     private var eventsJob: Job? = null
 
