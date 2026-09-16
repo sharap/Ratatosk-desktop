@@ -23,6 +23,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import chat.ratatosk.desktop.ui.RatatoskViewModel
 import chat.ratatosk.desktop.ui.Strings
+import org.ratatosk.core.FfiYggMode
 import chat.ratatosk.desktop.ui.components.Avatar
 import chat.ratatosk.desktop.ui.components.AvatarCropDialog
 import chat.ratatosk.desktop.util.ClipboardUtils
@@ -49,6 +50,7 @@ fun ProfileScreen(
     val cardVersion by viewModel.cardVersion.collectAsState()
     val myContactUri by viewModel.myContactUri.collectAsState()
     val isCompanionMode by viewModel.isCompanionMode.collectAsState()
+    val yggState by viewModel.yggState.collectAsState()
     val scope = rememberCoroutineScope()
     
     val snackbarHostState = remember { SnackbarHostState() }
@@ -153,6 +155,8 @@ fun ProfileScreen(
                             onCopyLink = copyLink
                         )
 
+                        YggCard(yggState)
+
                         Spacer(modifier = Modifier.height(32.dp))
 
                         ProfileNotices(notices = notices)
@@ -196,6 +200,7 @@ fun ProfileScreen(
                         onShowQr = { showMyQr = true },
                         onCopyLink = copyLink
                     )
+                    YggCard(yggState)
                 }
 
                 Spacer(modifier = Modifier.height(32.dp))
@@ -351,6 +356,55 @@ fun ProfileHeader(
         if (onEditName != null) {
             IconButton(onClick = onEditName) {
                 Icon(Icons.Default.Edit, contentDescription = Strings.EDIT, modifier = Modifier.size(20.dp))
+            }
+        }
+    }
+}
+
+/**
+ * Свой адрес в меше — рядом с отпечатком и onion: это тоже то, по чему
+ * находят именно вас. Меш выключен — карточки нет; ключ не задан — так
+ * и сказано, потому что без ключа меш не работает.
+ */
+@Composable
+private fun YggCard(ygg: chat.ratatosk.desktop.model.YggState?) {
+    if (ygg == null || ygg.mode == FfiYggMode.OFF) return
+    Spacer(modifier = Modifier.height(16.dp))
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Text(
+                text = Strings.YGG_ADDRESS_LABEL,
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.outline
+            )
+            val address = ygg.address
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = address ?: Strings.YGG_KEY_NOT_SET,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = if (address != null) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.outline,
+                    modifier = Modifier.weight(1f)
+                )
+                if (address != null) {
+                    IconButton(onClick = { ClipboardUtils.copyToClipboard(address) }) {
+                        Icon(Icons.Default.ContentCopy, contentDescription = Strings.COPY, modifier = Modifier.size(20.dp))
+                    }
+                }
+            }
+            // Ключ — то, что уехало собеседникам; адрес выводится из него.
+            ygg.keyHex?.let { key ->
+                Spacer(modifier = Modifier.height(8.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = Strings.YGG_KEY.format(key),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.outline,
+                        modifier = Modifier.weight(1f)
+                    )
+                    IconButton(onClick = { ClipboardUtils.copyToClipboard(key) }) {
+                        Icon(Icons.Default.ContentCopy, contentDescription = Strings.COPY, modifier = Modifier.size(20.dp))
+                    }
+                }
             }
         }
     }
