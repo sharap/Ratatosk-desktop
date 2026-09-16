@@ -16,6 +16,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.ImageBitmap
@@ -97,6 +98,9 @@ fun MediaViewerWindow(media: ViewerMedia, onClose: () -> Unit) {
                     Modifier
                         .weight(1f)
                         .fillMaxWidth()
+                        // Увеличенная картинка рисуется дальше своих границ:
+                        // без обрезки она наезжала на кнопки в шапке.
+                        .clipToBounds()
                         .background(Color.Black)
                         // Колесо масштабирует и с Ctrl, и без: в просмотрщике
                         // прокручивать всё равно нечего.
