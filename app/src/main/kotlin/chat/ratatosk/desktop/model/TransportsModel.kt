@@ -34,6 +34,8 @@ interface TransportsApi {
     fun createMailAccount(url: String, viaTor: Boolean)
     fun clearMailAccount()
     fun setLanEnabled(enabled: Boolean)
+    /** Пересмотреть сеть: адреса собеседников могли поменяться. */
+    fun networkChanged()
 }
 
 /** Ступени доставки: Tor, почта, локальная сеть — и объявление своих адресов. */
@@ -95,6 +97,10 @@ class TransportsModel(session: SessionContext) : FeatureModel(session), Transpor
                 _btHasRadio.value = radio
             }
         }
+    }
+
+    override fun networkChanged() {
+        session.clientIo("Failed to refresh network") { it.networkChanged() }
     }
 
     override fun setTransportEnabled(transport: FfiTransport, enabled: Boolean) {

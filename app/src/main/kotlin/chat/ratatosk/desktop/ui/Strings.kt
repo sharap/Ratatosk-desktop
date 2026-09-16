@@ -385,6 +385,18 @@ object Strings {
     const val CONTACT_ADDED = "Добавлен: %s"
     const val TECHNICAL_DETAILS = "Технические детали"
 
+    // Списки чатов и контактов
+    const val SEARCH_CHATS_HINT = "Найти чат..."
+    const val SEARCH_CONTACTS_HINT = "Найти контакт..."
+    const val NOTHING_FOUND = "Ничего не найдено"
+    const val OPEN_CARD = "Открыть карточку"
+    const val GROUP_CARD = "О группе"
+    const val DATE_YESTERDAY = "вчера"
+    const val CONTACT_NOT_IN_LIST = "Этого человека нет в ваших контактах"
+    const val CONTACT_NOT_IN_LIST_DESC = "Он написал в группе. Чтобы завести личный чат, попросите у него ссылку-приглашение и добавьте контакт."
+    const val GROUP_MEMBER = "Участник группы"
+    const val YGG_ADDRESS_LABEL = "Адрес в меше"
+
     // Companion Mode
     const val LINK_COMPANION = "Войти как компаньон"
     const val SCAN_QR = "Сканировать QR-код"

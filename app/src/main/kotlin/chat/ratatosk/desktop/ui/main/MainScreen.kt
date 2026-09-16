@@ -29,6 +29,7 @@ import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.isBackPressed
 import androidx.compose.ui.input.pointer.onPointerEvent
 import androidx.compose.ui.unit.dp
+import chat.ratatosk.desktop.model.ChatItem
 import chat.ratatosk.desktop.model.NavState
 import chat.ratatosk.desktop.model.Pane
 import chat.ratatosk.desktop.model.Section
@@ -82,7 +83,7 @@ fun MainScreen(viewModel: RatatoskViewModel) {
             VerticalDivider()
             if (wide) {
                 Box(Modifier.width(LIST_WIDTH).fillMaxHeight()) {
-                    SectionList(viewModel, nav.section)
+                    SectionList(viewModel, nav, isCompanionMode)
                 }
                 VerticalDivider()
                 BoxWithConstraints(Modifier.weight(1f).fillMaxHeight()) {
@@ -98,7 +99,7 @@ fun MainScreen(viewModel: RatatoskViewModel) {
             } else {
                 Box(Modifier.weight(1f).fillMaxHeight()) {
                     val top = nav.top
-                    if (top == null) SectionList(viewModel, nav.section)
+                    if (top == null) SectionList(viewModel, nav, isCompanionMode)
                     else PaneContent(viewModel, top, isCompanionMode, showBack = true, twoColumn = false)
                 }
             }
@@ -107,17 +108,35 @@ fun MainScreen(viewModel: RatatoskViewModel) {
 }
 
 @Composable
-private fun SectionList(viewModel: RatatoskViewModel, section: Section) {
-    when (section) {
+private fun SectionList(viewModel: RatatoskViewModel, nav: NavState, isCompanionMode: Boolean) {
+    // Что выделено в списке — то, что сейчас показано справа, чем бы оно ни было.
+    val selected = when (val top = nav.top) {
+        is Pane.Chat -> top.chatId
+        is Pane.Contact -> top.chatId
+        is Pane.GroupInfo -> top.chatId
+        else -> null
+    }
+    when (nav.section) {
         Section.CHATS -> ChatListScreen(
             viewModel = viewModel,
             onChatClick = { viewModel.openChat(it) },
-            isTwoColumn = false,
+            onOpenCard = { item ->
+                when (item) {
+                    is ChatItem.GroupChat -> viewModel.openGroupInfo(item.chatId)
+                    is ChatItem.Direct -> viewModel.openContact(item.chatId, fromChat = false)
+                }
+            },
+            selectedChatId = selected,
         )
+        // У компаньона карточки контакта нет (ключей и сверки на втором экране
+        // не бывает), поэтому строка сразу открывает чат, а завести контакт
+        // может только телефон.
         Section.CONTACTS -> ContactsScreen(
             viewModel = viewModel,
-            onContactClick = { viewModel.openContact(it, fromChat = false) },
-            isTwoColumn = false,
+            onContactClick = { if (isCompanionMode) viewModel.openChat(it) else viewModel.openContact(it, fromChat = false) },
+            onChatClick = { viewModel.openChat(it) },
+            selectedChatId = selected,
+            showFab = !isCompanionMode,
         )
     }
 }
@@ -207,14 +226,12 @@ private fun NavRail(viewModel: RatatoskViewModel, nav: NavState, isCompanionMode
             },
             label = { Text(Strings.CHATS) }
         )
-        if (!isCompanionMode) {
-            NavigationRailItem(
-                selected = sectionSelected(Section.CONTACTS),
-                onClick = { goToSection(Section.CONTACTS) },
-                icon = { Icon(Icons.Default.AccountBox, contentDescription = null) },
-                label = { Text(Strings.CONTACTS) }
-            )
-        }
+        NavigationRailItem(
+            selected = sectionSelected(Section.CONTACTS),
+            onClick = { goToSection(Section.CONTACTS) },
+            icon = { Icon(Icons.Default.AccountBox, contentDescription = null) },
+            label = { Text(Strings.CONTACTS) }
+        )
         Spacer(Modifier.weight(1f))
         NavigationRailItem(
             selected = top == Pane.Settings,

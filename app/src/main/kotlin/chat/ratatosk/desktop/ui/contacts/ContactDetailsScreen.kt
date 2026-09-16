@@ -24,9 +24,37 @@ import androidx.compose.ui.unit.dp
 import chat.ratatosk.desktop.ui.RatatoskViewModel
 import chat.ratatosk.desktop.ui.Strings
 import chat.ratatosk.desktop.ui.components.Avatar
+import chat.ratatosk.desktop.ui.components.PickChatDialog
 import chat.ratatosk.desktop.util.ClipboardUtils
+import chat.ratatosk.desktop.util.DateUtils
 import chat.ratatosk.desktop.util.toHexString
 import org.ratatosk.core.*
+
+@Composable
+private fun UnknownPersonCard(viewModel: RatatoskViewModel, chatId: ByteArray, modifier: Modifier = Modifier) {
+    val members by viewModel.groupMembers.collectAsState()
+    val name = remember(members, chatId) {
+        members.values.flatten().firstOrNull { it.chatId.contentEquals(chatId) }?.name
+    }
+    Column(
+        modifier = modifier.fillMaxSize().padding(24.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center
+    ) {
+        Avatar(avatarBytes = null, name = name ?: "?", size = 80.dp)
+        Spacer(modifier = Modifier.height(16.dp))
+        Text(name ?: Strings.GROUP_MEMBER, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+        Spacer(modifier = Modifier.height(8.dp))
+        Text(Strings.CONTACT_NOT_IN_LIST, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.outline)
+        Spacer(modifier = Modifier.height(8.dp))
+        Text(
+            Strings.CONTACT_NOT_IN_LIST_DESC,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.outline,
+            textAlign = androidx.compose.ui.text.style.TextAlign.Center
+        )
+    }
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -67,9 +95,9 @@ fun ContactDetailsScreen(
         }
     ) { innerPadding ->
         if (contact == null) {
-            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Text("Contact not found")
-            }
+            // Автор из группы, которого нет в контактах: ссылки на него у нас
+            // нет, поэтому «Добавить» здесь было бы обещанием без основания.
+            UnknownPersonCard(viewModel, chatId, Modifier.padding(innerPadding))
         } else {
             Column(
                 modifier = Modifier
@@ -135,7 +163,7 @@ fun ContactDetailsScreen(
                 }
 
                 Text(
-                    text = Strings.CONTACT_ADDED.format(java.util.Date(contact.addedMs.toLong()).toString()), // Simplified date
+                    text = Strings.CONTACT_ADDED.format(DateUtils.formatDateTime(contact.addedMs)),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.outline
                 )
@@ -246,7 +274,8 @@ fun ContactDetailsScreen(
                             }
                         }
 
-                        if (contact.onion != null || contact.chatmail != null) {
+                        val yggHex = contact.ygg?.takeIf { it.isNotEmpty() }?.toHexString()
+                        if (contact.onion != null || contact.chatmail != null || yggHex != null) {
                             HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
                         }
 
@@ -273,6 +302,21 @@ fun ContactDetailsScreen(
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Text(chatmail, style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f))
                                 IconButton(onClick = { ClipboardUtils.copyToClipboard(chatmail) }) {
+                                    Icon(Icons.Default.ContentCopy, contentDescription = null, modifier = Modifier.size(20.dp))
+                                }
+                            }
+                        }
+
+                        // Ключ в меше — то, чем этого человека находит Yggdrasil.
+                        yggHex?.let { ygg ->
+                            Text(
+                                text = Strings.YGG_ADDRESS_LABEL,
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.outline
+                            )
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(ygg, style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f))
+                                IconButton(onClick = { ClipboardUtils.copyToClipboard(ygg) }) {
                                     Icon(Icons.Default.ContentCopy, contentDescription = null, modifier = Modifier.size(20.dp))
                                 }
                             }
@@ -469,35 +513,15 @@ fun ContactDetailsScreen(
     }
 
     if (showShareToChatDialog && contact != null) {
-        val allContacts by viewModel.contacts.collectAsState()
-        AlertDialog(
-            onDismissRequest = { showShareToChatDialog = false },
-            title = { Text(Strings.SHARE_TO) },
-            text = {
-                LazyColumn(modifier = Modifier.heightIn(max = 400.dp)) {
-                    items(allContacts.filter { !it.chatId.contentEquals(contact.chatId) }) { target ->
-                        ListItem(
-                            headlineContent = { Text(target.localName ?: target.displayName) },
-                            leadingContent = {
-                                Avatar(
-                                    avatarBytes = contactAvatars[target.peerIk.toHexString()] ?: viewModel.getAvatarOf(target.peerIk),
-                                    name = target.localName ?: target.displayName
-                                )
-                            },
-                            modifier = Modifier.clickable {
-                                viewModel.shareContact(target.chatId, contact.peerIk)
-                                showShareToChatDialog = false
-                            }
-                        )
-                    }
-                }
+        PickChatDialog(
+            viewModel = viewModel,
+            title = Strings.SHARE_TO,
+            excludeChatId = contact.chatId,
+            onDismiss = { showShareToChatDialog = false },
+            onPick = { target ->
+                viewModel.shareContact(target, contact.peerIk)
+                showShareToChatDialog = false
             },
-            confirmButton = {},
-            dismissButton = {
-                TextButton(onClick = { showShareToChatDialog = false }) {
-                    Text(Strings.CANCEL)
-                }
-            }
         )
     }
 }

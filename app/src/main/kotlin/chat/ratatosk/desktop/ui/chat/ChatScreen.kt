@@ -35,6 +35,7 @@ import chat.ratatosk.desktop.model.buildChatMessages
 import chat.ratatosk.desktop.ui.RatatoskViewModel
 import chat.ratatosk.desktop.ui.Strings
 import chat.ratatosk.desktop.ui.components.Avatar
+import chat.ratatosk.desktop.ui.components.PickChatDialog
 import chat.ratatosk.desktop.util.ClipboardUtils
 import chat.ratatosk.desktop.util.FilePicker
 import chat.ratatosk.desktop.util.FileUtils
@@ -408,10 +409,16 @@ fun ChatScreen(
     }
 
     forwardIds?.let { ids ->
-        ForwardDialog(viewModel, notices.forward, onDismiss = { forwardIds = null }) { target ->
-            viewModel.forwardMessages(target, ids)
-            forwardIds = null
-        }
+        PickChatDialog(
+            viewModel = viewModel,
+            title = Strings.FORWARD_TO,
+            notice = notices.forward,
+            onDismiss = { forwardIds = null },
+            onPick = { target ->
+                viewModel.forwardMessages(target, ids)
+                forwardIds = null
+            },
+        )
     }
     confirmDelete?.let { msg ->
         ConfirmDialog(Strings.CHAT_DELETE_TITLE, notices.deletion, Strings.CHAT_DELETE_FOR_ME, onDismiss = { confirmDelete = null }) {
@@ -525,47 +532,6 @@ private fun SearchResults(viewModel: RatatoskViewModel, onPick: (FfiMessage) -> 
             }
         }
     }
-}
-
-/** Переслать: личные чаты и группы, в которых мы состоим; текст ядра — до выбора. */
-@Composable
-private fun ForwardDialog(viewModel: RatatoskViewModel, notice: String, onDismiss: () -> Unit, onPick: (ByteArray) -> Unit) {
-    val contacts by viewModel.contacts.collectAsState()
-    val groups by viewModel.groups.collectAsState()
-    val avatars by viewModel.contactAvatars.collectAsState()
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(Strings.FORWARD_TO) },
-        text = {
-            Column {
-                if (notice.isNotBlank()) Text(notice, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(bottom = 8.dp))
-                LazyColumn(Modifier.heightIn(max = 420.dp)) {
-                    val joined = groups.filter { it.joined }
-                    if (joined.isNotEmpty()) {
-                        item { Text(Strings.FORWARD_GROUPS, style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(vertical = 4.dp)) }
-                        items(joined, key = { "g" + it.chatId.toHexString() }) { g ->
-                            ListItem(
-                                headlineContent = { Text(g.title) },
-                                leadingContent = { Icon(Icons.Default.Groups, null) },
-                                modifier = Modifier.clickable { onPick(g.chatId) },
-                            )
-                        }
-                    }
-                    item { Text(Strings.FORWARD_CONTACTS, style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(vertical = 4.dp)) }
-                    items(contacts, key = { "c" + it.chatId.toHexString() }) { c ->
-                        val name = c.localName ?: c.displayName
-                        ListItem(
-                            headlineContent = { Text(name) },
-                            leadingContent = { Avatar(avatarBytes = avatars[c.peerIk.toHexString()], name = name) },
-                            modifier = Modifier.clickable { onPick(c.chatId) },
-                        )
-                    }
-                }
-            }
-        },
-        confirmButton = {},
-        dismissButton = { TextButton(onClick = onDismiss) { Text(Strings.CANCEL) } },
-    )
 }
 
 @Composable
