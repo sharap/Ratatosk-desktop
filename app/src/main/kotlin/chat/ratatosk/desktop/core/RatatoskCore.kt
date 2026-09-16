@@ -163,7 +163,13 @@ object RatatoskCore : EventObserver, CompanionObserver {
     }
 
     @Throws(RatatoskException::class)
-    fun initializeCompanion(inviteUri: String, port: UShort, peerAddr: String?, cachePath: String?): RatatoskCompanion {
+    fun initializeCompanion(
+        inviteUri: String,
+        port: UShort,
+        peerAddr: String?,
+        cachePath: String?,
+        torDir: String? = null,
+    ): RatatoskCompanion {
         synchronized(this) {
             
             client?.destroy()
@@ -172,12 +178,15 @@ object RatatoskCore : EventObserver, CompanionObserver {
             companion = null
             
             return try {
-                // Свой onion компаньону пока не поднимаем: выбор «Tor» в привязке — этап 5.
-                val newCompanion = RatatoskCompanion.open(inviteUri, port, peerAddr, cachePath, torDir = null)
+                // `torDir` задан — поднимаем свой onion: вне общей сети с телефоном
+                // без него связи нет вовсе, зато первый подъём идёт десятки секунд.
+                val newCompanion = RatatoskCompanion.open(inviteUri, port, peerAddr, cachePath, torDir)
                 newCompanion.setObserver(this)
-                
+
                 companion = newCompanion
-                activeAccountIdHex = "companion:${inviteUri.hashCode()}"
+                // Имя аккаунта — по идентификатору устройства от ядра, а не по
+                // `hashCode` ссылки: тот не обещает ни постоянства, ни различий.
+                activeAccountIdHex = "companion:" + newCompanion.deviceId().toHexString()
                 isCompanionMode = true
                 nativeError = null
                 newCompanion

@@ -40,7 +40,17 @@ interface AccountsApi {
     fun selectAccount(account: FfiAccount?)
     fun setCreatingNewAccount(creating: Boolean)
     fun openCompanionPairing(pairing: SettingsRepository.CompanionPairing)
-    fun initializeCompanion(uri: String, useCache: Boolean, deviceId: String? = null)
+    fun initializeCompanion(
+        uri: String,
+        useCache: Boolean,
+        deviceId: String? = null,
+        /** `null` — порт выберет система: телефон узнаёт его из маяка. */
+        port: Int? = null,
+        /** Адрес телефона вида `192.168.1.5:41234`; нужен там, где mDNS молчит. */
+        peerAddr: String? = null,
+        /** Поднять свой onion: работает вне общей сети, но подъём долгий. */
+        useTor: Boolean = false,
+    )
     fun removeCompanionPairing(deviceId: String)
 }
 
@@ -223,11 +233,18 @@ class AccountsModel(
                 session._error.value = "Pairing link is not available in the system secret store"
                 return@launch
             }
-            initializeCompanion(uri, pairing.useCache, pairing.deviceId)
+            initializeCompanion(uri, pairing.useCache, pairing.deviceId, useTor = pairing.useTor)
         }
     }
 
-    override fun initializeCompanion(uri: String, useCache: Boolean, deviceId: String?) {
+    override fun initializeCompanion(
+        uri: String,
+        useCache: Boolean,
+        deviceId: String?,
+        port: Int?,
+        peerAddr: String?,
+        useTor: Boolean,
+    ) {
         scope.launch(Dispatchers.IO) {
             try {
                 val baseDir = File(AppDirs.getBaseDir(), "companions")
@@ -238,7 +255,21 @@ class AccountsModel(
                     File(baseDir, "$deviceId.db").absolutePath
                 } else null
 
-                val companion = RatatoskCore.initializeCompanion(uri, 0u, null, initialCachePath)
+                // Каталог состояния onion — свой у каждой ссылки и постоянный:
+                // адрес выводится из секрета сопряжения, а arti держит там
+                // состояние сети; одноразовый каталог означал бы полный
+                // bootstrap на каждый запуск (FFI, `tor_dir`).
+                val torDir = if (useTor) {
+                    File(baseDir, "tor-" + digestOf(uri)).apply { mkdirs() }.absolutePath
+                } else null
+
+                val companion = RatatoskCore.initializeCompanion(
+                    uri,
+                    (port ?: 0).toUShort(),
+                    peerAddr?.trim()?.takeIf { it.isNotEmpty() },
+                    initialCachePath,
+                    torDir,
+                )
 
                 val actualDeviceId = companion.deviceId().toHexString()
                 val phoneName = companion.phoneName()
@@ -253,7 +284,7 @@ class AccountsModel(
                         companion.setCachePath(finalCachePath)
                     }
                     settings.saveCompanionPairing(
-                        SettingsRepository.CompanionPairing(actualDeviceId, phoneName, true)
+                        SettingsRepository.CompanionPairing(actualDeviceId, phoneName, true, useTor = useTor)
                     )
                 }
 
@@ -269,6 +300,13 @@ class AccountsModel(
             }
         }
     }
+
+    /** Короткая метка ссылки — только для имени каталога: одна ссылка, один каталог. */
+    private fun digestOf(uri: String): String =
+        java.security.MessageDigest.getInstance("SHA-256")
+            .digest(uri.toByteArray())
+            .toHexString()
+            .take(16)
 
     override fun removeCompanionPairing(deviceId: String) {
         scope.launch(Dispatchers.IO) {

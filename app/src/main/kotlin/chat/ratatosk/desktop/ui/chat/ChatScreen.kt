@@ -126,6 +126,15 @@ fun ChatScreen(
         if (isGroup) viewModel.loadMembers(chatId)
         runCatching { composerFocus.requestFocus() }
     }
+    // Отказ ядра или неудачу с файлом человек должен видеть там, где он работает.
+    LaunchedEffect(Unit) {
+        viewModel.error.collect { message ->
+            if (message != null) {
+                snackbar.showSnackbar(message)
+                viewModel.clearError()
+            }
+        }
+    }
     LaunchedEffect(query, searchOpen) {
         if (searchOpen) viewModel.searchMessages(chatId, query) else viewModel.clearSearch()
     }

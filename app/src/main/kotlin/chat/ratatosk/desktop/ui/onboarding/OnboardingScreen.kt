@@ -4,6 +4,8 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ExpandLess
+import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Devices
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -232,23 +234,33 @@ fun OnboardingScreen(viewModel: RatatoskViewModel) {
         CompanionSetupDialog(
             canRemember = secretStoreAvailable == true,
             onDismiss = { showCompanionSetup = false },
-            onLink = { uri, useCache ->
-                viewModel.initializeCompanion(uri, useCache)
+            onLink = { uri, useCache, port, peerAddr, useTor ->
+                viewModel.initializeCompanion(uri, useCache, port = port, peerAddr = peerAddr, useTor = useTor)
                 showCompanionSetup = false
             }
         )
     }
 }
 
+/**
+ * Привязка второго экрана. На виду — ссылка, кэш и Tor; порт и адрес телефона
+ * нужны редко (гостевой Wi-Fi, VPN, loopback) и спрятаны за «Дополнительно».
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CompanionSetupDialog(
     canRemember: Boolean,
     onDismiss: () -> Unit,
-    onLink: (String, Boolean) -> Unit
+    onLink: (uri: String, useCache: Boolean, port: Int?, peerAddr: String?, useTor: Boolean) -> Unit
 ) {
     var uri by remember { mutableStateOf("") }
     var useCache by remember(canRemember) { mutableStateOf(canRemember) }
+    var useTor by remember { mutableStateOf(false) }
+    var advanced by remember { mutableStateOf(false) }
+    var portText by remember { mutableStateOf("") }
+    var peerAddr by remember { mutableStateOf("") }
+    val port = portText.trim().toIntOrNull()
+    val portOk = portText.isBlank() || (port != null && port in 1..65535)
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -277,12 +289,43 @@ fun CompanionSetupDialog(
                         color = MaterialTheme.colorScheme.error
                     )
                 }
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Checkbox(checked = useTor, onCheckedChange = { useTor = it })
+                    Column {
+                        Text(Strings.COMPANION_TOR, style = MaterialTheme.typography.bodySmall)
+                        Text(Strings.COMPANION_TOR_DESC, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline)
+                    }
+                }
+                TextButton(onClick = { advanced = !advanced }) {
+                    Text(Strings.COMPANION_ADVANCED)
+                    Icon(if (advanced) Icons.Default.ExpandLess else Icons.Default.ExpandMore, contentDescription = null)
+                }
+                if (advanced) {
+                    OutlinedTextField(
+                        value = portText,
+                        onValueChange = { portText = it.filter { c -> c.isDigit() } },
+                        label = { Text(Strings.COMPANION_PORT) },
+                        singleLine = true,
+                        isError = !portOk,
+                        supportingText = { if (!portOk) Text(Strings.COMPANION_PORT_INVALID) },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = peerAddr,
+                        onValueChange = { peerAddr = it },
+                        label = { Text(Strings.COMPANION_PEER) },
+                        singleLine = true,
+                        supportingText = { Text(Strings.COMPANION_PEER_DESC, style = MaterialTheme.typography.labelSmall) },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
             }
         },
         confirmButton = {
             Button(
-                onClick = { onLink(uri, useCache) },
-                enabled = uri.startsWith("ratatosk:v0:pair:")
+                onClick = { onLink(uri, useCache, port, peerAddr.ifBlank { null }, useTor) },
+                enabled = uri.startsWith("ratatosk:v0:pair:") && portOk
             ) {
                 Text(Strings.ADD)
             }

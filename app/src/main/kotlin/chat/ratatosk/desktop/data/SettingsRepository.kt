@@ -132,6 +132,8 @@ class SettingsRepository(
         val phoneName: String,
         val useCache: Boolean,
         val legacyInviteUri: String? = null,
+        /** Поднимать свой onion при подключении: без него вне общей сети связи нет. */
+        val useTor: Boolean = false,
     )
 
     val companionPairings: Flow<List<CompanionPairing>> = dataStore.data.map { preferences ->
@@ -144,11 +146,13 @@ class SettingsRepository(
             val parts = it.split("||")
             when {
                 parts.isEmpty() || parts[0].isBlank() -> null
-                // Новый формат: deviceId||phoneName||useCache
+                // deviceId||phoneName||useCache
                 parts.size == 3 -> CompanionPairing(parts[0], parts[1], parts[2].toBoolean())
-                // Старый: deviceId||inviteUri||phoneName||useCache
-                parts.size == 4 && parts[1].isNotBlank() ->
+                // Старый: deviceId||inviteUri||phoneName||useCache — ссылку видно по схеме.
+                parts.size == 4 && parts[1].startsWith("ratatosk:") ->
                     CompanionPairing(parts[0], parts[2], parts[3].toBoolean(), legacyInviteUri = parts[1])
+                // Нынешний: deviceId||phoneName||useCache||useTor
+                parts.size == 4 -> CompanionPairing(parts[0], parts[1], parts[2].toBoolean(), useTor = parts[3].toBoolean())
                 else -> null
             }
         }
@@ -159,7 +163,7 @@ class SettingsRepository(
         return if (pairing.legacyInviteUri != null) {
             "${pairing.deviceId}||${pairing.legacyInviteUri}||$phoneName||${pairing.useCache}"
         } else {
-            "${pairing.deviceId}||$phoneName||${pairing.useCache}"
+            "${pairing.deviceId}||$phoneName||${pairing.useCache}||${pairing.useTor}"
         }
     }
 

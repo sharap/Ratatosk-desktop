@@ -430,4 +430,11 @@ object Strings {
     const val COMPANION_MANUAL_PORT = "Порт"
     const val COMPANION_MANUAL_KEY = "Ключ этого экрана"
     const val COMPANION_MANUAL_HINT = "Нажмите на полосу «Подключаемся», чтобы увидеть это снова."
+    const val COMPANION_TOR = "Подключаться через Tor"
+    const val COMPANION_TOR_DESC = "Нужен, если телефон не в одной сети с этим компьютером. Первый подъём идёт десятки секунд, и до него телефон дотянется только по локальной сети."
+    const val COMPANION_ADVANCED = "Дополнительно"
+    const val COMPANION_PORT = "Порт для входящих (пусто — выберет система)"
+    const val COMPANION_PORT_INVALID = "Порт — число от 1 до 65535"
+    const val COMPANION_PEER = "Адрес телефона, например 192.168.1.5:41234"
+    const val COMPANION_PEER_DESC = "Обычно не нужен: в общей сети телефон находится сам. Пригодится в гостевом Wi-Fi с изоляцией клиентов и за корпоративными точками."
 }

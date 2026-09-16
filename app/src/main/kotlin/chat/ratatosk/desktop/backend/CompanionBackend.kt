@@ -39,6 +39,12 @@ class CompanionBackend(val companion: RatatoskCompanion) : Backend {
     /** Сохранения, ждущие `FileSaved` от ядра. */
     private val pendingSaves = ConcurrentHashMap<String, CompletableDeferred<Unit>>()
 
+    private fun failPendingSaves(reason: String) {
+        val waiting = pendingSaves.values.toList()
+        pendingSaves.clear()
+        waiting.forEach { it.completeExceptionally(IllegalStateException(reason)) }
+    }
+
     private fun emit(event: AppEvent) {
         if (!_events.tryEmit(event)) Log.w(TAG, "Event buffer full")
     }
@@ -60,8 +66,16 @@ class CompanionBackend(val companion: RatatoskCompanion) : Backend {
                 emit(AppEvent.Linked)
                 emit(AppEvent.ChatsChanged)
             }
-            is FfiCompanionEvent.Unlinked, is FfiCompanionEvent.Revoked -> emit(AppEvent.Unlinked)
-            is FfiCompanionEvent.Refused -> emit(AppEvent.Refused(event.reason))
+            is FfiCompanionEvent.Unlinked, is FfiCompanionEvent.Revoked -> {
+                failPendingSaves("Телефон не на связи")
+                emit(AppEvent.Unlinked)
+            }
+            // Ядро отказалось словами — сохранение уже не придёт. Без этого
+            // ожидание висело вечно, и вложение «просто не открывалось».
+            is FfiCompanionEvent.Refused -> {
+                failPendingSaves(event.reason)
+                emit(AppEvent.Refused(event.reason))
+            }
 
             is FfiCompanionEvent.Chats -> {
                 val (groups, personal) = event.chats.partition { it.isGroup }
@@ -166,6 +180,11 @@ class CompanionBackend(val companion: RatatoskCompanion) : Backend {
      */
     override suspend fun saveFile(file: FfiFile, destination: File) {
         val key = file.fileId.toHexString()
+        // Ядро берёт по одному вложению за раз: второй вызов до конца первого
+        // вернётся отказом, а не встанет в очередь (FFI, save_file).
+        if (pendingSaves.isNotEmpty() && !pendingSaves.containsKey(key)) {
+            throw IllegalStateException("Уже забираем другое вложение — дождитесь конца")
+        }
         val done = CompletableDeferred<Unit>()
         pendingSaves.put(key, done)?.cancel()
         try {

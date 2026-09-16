@@ -179,8 +179,8 @@ fun AccountSelectionScreen(viewModel: RatatoskViewModel) {
         chat.ratatosk.desktop.ui.onboarding.CompanionSetupDialog(
             canRemember = viewModel.secretStoreAvailable.collectAsState().value == true,
             onDismiss = { showCompanionSetup = false },
-            onLink = { uri, useCache ->
-                viewModel.initializeCompanion(uri, useCache)
+            onLink = { uri, useCache, port, peerAddr, useTor ->
+                viewModel.initializeCompanion(uri, useCache, port = port, peerAddr = peerAddr, useTor = useTor)
                 showCompanionSetup = false
             }
         )

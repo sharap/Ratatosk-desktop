@@ -1,6 +1,7 @@
 package chat.ratatosk.desktop.model
 
 import chat.ratatosk.desktop.backend.AppEvent
+import chat.ratatosk.desktop.util.hexToByteArray
 import chat.ratatosk.desktop.util.toHexString
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -278,6 +279,12 @@ class ChatsModel(session: SessionContext) : FeatureModel(session), ChatsApi {
         }
     }
 
+    /** В каком загруженном чате лежит это вложение. */
+    private fun chatIdWithFile(fileId: ByteArray): ByteArray? =
+        _messages.value.entries
+            .firstOrNull { (_, list) -> list.any { msg -> msg.files.any { it.fileId.contentEquals(fileId) } } }
+            ?.key?.hexToByteArray()
+
     override fun onEvent(event: AppEvent) {
         when (event) {
             is AppEvent.ChatsLoaded -> {
@@ -299,6 +306,13 @@ class ChatsModel(session: SessionContext) : FeatureModel(session), ChatsApi {
                 }
             }
             is AppEvent.MessagesChanged -> loadMessages(event.chatId)
+            // Файл собрался — в сообщении он всё ещё «не полный»: `FfiFile`
+            // это снимок, а события о ходе передачи чата не называют. Находим
+            // чат по `fileId` и перечитываем его, иначе кнопки «Открыть» и
+            // «Сохранить» появлялись только после повторного входа в чат.
+            is AppEvent.FileProgress -> if (event.fraction >= 1f) {
+                chatIdWithFile(event.fileId)?.let { loadMessages(it) }
+            }
             is AppEvent.StatusChanged -> {
                 _messageStatuses.update { it + (event.msgId.toHexString() to event.status) }
             }

@@ -42,11 +42,15 @@ fun AttachmentList(
     Column(Modifier.padding(bottom = 4.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
         files.forEach { file ->
             val hex = file.fileId.toHexString()
+            val fraction = progress[hex] ?: if (file.chunkTotal > 0UL) (file.receivedChunks.toFloat() / file.chunkTotal.toFloat()).coerceIn(0f, 1f) else 0f
             AttachmentCard(
                 file = file,
+                // Сообщение перечитывается чуть позже события — не ждём его,
+                // чтобы «Открыть» и «Сохранить» появились сразу по готовности.
+                doneByProgress = fraction >= 1f,
                 // Превью — через поток: пришло позже — перерисуется (ревью Android 2.5).
                 preview = previews[hex] ?: if (file.hasPreview) viewModel.getFilePreview(file.fileId) else null,
-                receiveFraction = progress[hex] ?: if (file.chunkTotal > 0UL) (file.receivedChunks.toFloat() / file.chunkTotal.toFloat()).coerceIn(0f, 1f) else 0f,
+                receiveFraction = fraction,
                 sendFraction = sending[hex],
                 waitingText = waiting[hex],
                 saving = hex in jobs,
@@ -65,6 +69,7 @@ fun AttachmentList(
 @Composable
 private fun AttachmentCard(
     file: FfiFile,
+    doneByProgress: Boolean,
     preview: ByteArray?,
     receiveFraction: Float,
     sendFraction: Float?,
@@ -77,9 +82,10 @@ private fun AttachmentCard(
     onSave: () -> Unit,
     onCancel: () -> Unit,
 ) {
-    val available = file.complete || !file.incoming
+    val complete = file.complete || doneByProgress
+    val available = complete || !file.incoming
     // Приём остановлен: приехавшее на месте, предложение живёт (FFI, pause_file).
-    val paused = file.incoming && !file.accepted && file.receivedChunks > 0UL
+    val paused = file.incoming && !file.accepted && !complete && file.receivedChunks > 0UL
     Column(
         Modifier
             .widthIn(min = 240.dp)
@@ -109,14 +115,14 @@ private fun AttachmentCard(
             Spacer(Modifier.width(8.dp))
             Column(Modifier.weight(1f)) {
                 Text(file.name, style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis, color = labelColor)
-                Text(stateLine(file, receiveFraction, sendFraction, paused), style = MaterialTheme.typography.labelSmall, color = subLabelColor)
+                Text(stateLine(file, receiveFraction, sendFraction, paused, complete), style = MaterialTheme.typography.labelSmall, color = subLabelColor)
             }
             when {
                 saving -> {
                     CircularProgressIndicator(progress = { receiveFraction }, modifier = Modifier.size(20.dp), strokeWidth = 2.dp, color = actionColor)
                     IconButton(onClick = onCancel) { Icon(Icons.Default.Close, Strings.FILE_CANCEL, tint = MaterialTheme.colorScheme.error) }
                 }
-                file.incoming && !file.accepted && !file.complete -> {
+                file.incoming && !file.accepted && !complete -> {
                     IconButton(onClick = onDecline) { Icon(Icons.Default.Close, Strings.FILE_DECLINE, tint = MaterialTheme.colorScheme.error) }
                     // Остановленное продолжаем тем же `acceptFile` — с того же места.
                     IconButton(onClick = onAccept) {
@@ -142,7 +148,7 @@ private fun AttachmentCard(
             }
         }
         // Стоит — словами ядра, почему: «ошибка» и «загрузка» здесь одинаково неправда.
-        if (waitingText != null && !file.complete) {
+        if (waitingText != null && !complete) {
             Text(
                 waitingText,
                 style = MaterialTheme.typography.labelSmall,
@@ -153,14 +159,14 @@ private fun AttachmentCard(
     }
 }
 
-private fun stateLine(file: FfiFile, receive: Float, send: Float?, paused: Boolean): String {
+private fun stateLine(file: FfiFile, receive: Float, send: Float?, paused: Boolean, complete: Boolean): String {
     val size = formatFileSize(file.sizeBytes)
     return when {
         !file.incoming && send != null && send < 1f -> "$size · " + Strings.FILE_SENDING.format((send * 100).toInt())
         // «Остановлено», а не «отменено»: прочитавший «отменено» не станет
         // продолжать то, что считает потерянным (FFI, pause_file).
         paused -> "$size · " + Strings.FILE_PAUSED.format((receive * 100).toInt())
-        file.incoming && file.accepted && !file.complete -> "$size · " + Strings.FILE_RECEIVING.format((receive * 100).toInt())
+        file.incoming && file.accepted && !complete -> "$size · " + Strings.FILE_RECEIVING.format((receive * 100).toInt())
         else -> size
     }
 }
