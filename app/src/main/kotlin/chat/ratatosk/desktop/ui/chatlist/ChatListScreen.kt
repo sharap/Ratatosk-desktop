@@ -151,9 +151,7 @@ fun ChatListScreen(
                                 is ChatItem.Direct -> contactAvatars[item.contact.peerIk.toHexString()] ?: viewModel.getAvatarOf(item.contact.peerIk)
                             },
                             onClick = { onChatClick(item.chatId) },
-                            // У компаньона карточки контакта нет — тогда меню пустое,
-                            // и обещать её нечем.
-                            onOpenCard = if (item is ChatItem.GroupChat || !isCompanionMode) ({ onOpenCard(item) }) else null,
+                            onOpenCard = { onOpenCard(item) },
                         )
                     }
                 }
@@ -197,7 +195,7 @@ private fun ChatRow(
     selected: Boolean,
     avatar: ByteArray?,
     onClick: () -> Unit,
-    onOpenCard: (() -> Unit)?,
+    onOpenCard: () -> Unit,
 ) {
     var menuOpen by remember { mutableStateOf(false) }
     val last = item.lastMessage
@@ -208,7 +206,7 @@ private fun ChatRow(
             .fillMaxWidth()
             .background(if (selected) MaterialTheme.colorScheme.secondaryContainer else Color.Transparent)
             .clickable(onClick = onClick)
-            .onPointerEvent(PointerEventType.Press) { if (it.buttons.isSecondaryPressed && onOpenCard != null) menuOpen = true }
+            .onPointerEvent(PointerEventType.Press) { if (it.buttons.isSecondaryPressed) menuOpen = true }
     ) {
         ListItem(
             colors = ListItemDefaults.colors(containerColor = Color.Transparent),
@@ -258,13 +256,11 @@ private fun ChatRow(
             },
             trailingContent = { if (unread > 0) Badge { Text(unread.toString()) } },
         )
-        if (onOpenCard != null) {
-            DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
-                DropdownMenuItem(
-                    text = { Text(if (isGroup) Strings.GROUP_CARD else Strings.OPEN_CARD) },
-                    onClick = { menuOpen = false; onOpenCard() },
-                )
-            }
+        DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+            DropdownMenuItem(
+                text = { Text(if (isGroup) Strings.GROUP_CARD else Strings.OPEN_CARD) },
+                onClick = { menuOpen = false; onOpenCard() },
+            )
         }
     }
 }

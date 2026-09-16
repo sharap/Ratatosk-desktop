@@ -20,6 +20,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.unit.dp
 import chat.ratatosk.desktop.ui.RatatoskViewModel
 import chat.ratatosk.desktop.ui.Strings
@@ -29,6 +30,43 @@ import chat.ratatosk.desktop.util.ClipboardUtils
 import chat.ratatosk.desktop.util.DateUtils
 import chat.ratatosk.desktop.util.toHexString
 import org.ratatosk.core.*
+
+@Composable
+private fun CompanionContactCard(
+    contact: FfiContact,
+    avatar: ByteArray?,
+    isCompact: Boolean,
+    onChatClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val name = contact.localName ?: contact.displayName
+    Column(
+        modifier = modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(24.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Avatar(
+            avatarBytes = avatar,
+            name = name,
+            modifier = if (isCompact) Modifier.fillMaxWidth().widthIn(max = 320.dp).aspectRatio(1f) else Modifier.size(200.dp),
+            size = null,
+            shape = RectangleShape
+        )
+        Spacer(modifier = Modifier.height(16.dp))
+        Text(name, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+        if (contact.localName != null) {
+            Text("(${contact.displayName})", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.outline)
+        }
+        Spacer(modifier = Modifier.height(16.dp))
+        Text(
+            Strings.CONTACT_COMPANION_DESC,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.outline,
+            textAlign = androidx.compose.ui.text.style.TextAlign.Center
+        )
+        Spacer(modifier = Modifier.height(24.dp))
+        Button(onClick = onChatClick) { Text(Strings.GROUP_OPEN_CHAT) }
+    }
+}
 
 @Composable
 private fun UnknownPersonCard(viewModel: RatatoskViewModel, chatId: ByteArray, modifier: Modifier = Modifier) {
@@ -68,6 +106,7 @@ fun ContactDetailsScreen(
 ) {
     val contacts by viewModel.contacts.collectAsState()
     val contactAvatars by viewModel.contactAvatars.collectAsState()
+    val isCompanionMode by viewModel.isCompanionMode.collectAsState()
     val contact = remember(contacts, chatId) {
         contacts.find { it.chatId.contentEquals(chatId) }
     }
@@ -94,7 +133,17 @@ fun ContactDetailsScreen(
             )
         }
     ) { innerPadding ->
-        if (contact == null) {
+        if (contact != null && isCompanionMode) {
+            // На втором экране нет ни ключей, ни сверки, ни отпечатка: показываем
+            // лицо и имя — то, что телефон действительно прислал.
+            CompanionContactCard(
+                contact = contact,
+                avatar = contactAvatars[contact.peerIk.toHexString()] ?: viewModel.getAvatarOf(contact.peerIk),
+                isCompact = isCompact,
+                onChatClick = { onChatClick(chatId) },
+                modifier = Modifier.padding(innerPadding),
+            )
+        } else if (contact == null) {
             // Автор из группы, которого нет в контактах: ссылки на него у нас
             // нет, поэтому «Добавить» здесь было бы обещанием без основания.
             UnknownPersonCard(viewModel, chatId, Modifier.padding(innerPadding))
@@ -109,11 +158,13 @@ fun ContactDetailsScreen(
             ) {
                 val contentWidth = if (isCompact) 1f else 0.8f
                 
-                // Avatar
+                // Фото профиля — крупное, как в Android: разглядеть лицо, а не значок.
                 Avatar(
                     avatarBytes = contact.peerIk.toHexString().let { contactAvatars[it] } ?: viewModel.getAvatarOf(contact.peerIk),
                     name = contact.localName ?: contact.displayName,
-                    size = 100.dp
+                    modifier = if (isCompact) Modifier.fillMaxWidth().widthIn(max = 320.dp).aspectRatio(1f) else Modifier.size(200.dp),
+                    size = null,
+                    shape = RectangleShape
                 )
 
                 Spacer(modifier = Modifier.height(16.dp))

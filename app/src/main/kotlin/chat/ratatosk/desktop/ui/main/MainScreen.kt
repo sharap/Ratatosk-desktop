@@ -128,12 +128,10 @@ private fun SectionList(viewModel: RatatoskViewModel, nav: NavState, isCompanion
             },
             selectedChatId = selected,
         )
-        // У компаньона карточки контакта нет (ключей и сверки на втором экране
-        // не бывает), поэтому строка сразу открывает чат, а завести контакт
-        // может только телефон.
+        // Завести контакт у компаньона может только телефон — кнопки нет.
         Section.CONTACTS -> ContactsScreen(
             viewModel = viewModel,
-            onContactClick = { if (isCompanionMode) viewModel.openChat(it) else viewModel.openContact(it, fromChat = false) },
+            onContactClick = { viewModel.openContact(it, fromChat = false) },
             onChatClick = { viewModel.openChat(it) },
             selectedChatId = selected,
             showFab = !isCompanionMode,
@@ -152,11 +150,8 @@ private fun PaneContent(viewModel: RatatoskViewModel, pane: Pane, isCompanionMod
                 chatId = pane.chatId,
                 onBack = { viewModel.back() },
                 onHeaderClick = {
-                    when {
-                        viewModel.getGroup(pane.chatId) != null -> viewModel.openGroupInfo(pane.chatId)
-                        // У компаньона карточки контакта нет: ключей и сверки у второго экрана не бывает.
-                        !isCompanionMode -> viewModel.openContact(pane.chatId, fromChat = true)
-                    }
+                    if (viewModel.getGroup(pane.chatId) != null) viewModel.openGroupInfo(pane.chatId)
+                    else viewModel.openContact(pane.chatId, fromChat = true)
                 },
                 showBackButton = showBack,
                 isCompact = !twoColumn,
@@ -200,7 +195,7 @@ private fun NavRail(viewModel: RatatoskViewModel, nav: NavState, isCompanionMode
 
     NavigationRail(modifier = Modifier.width(72.dp)) {
         Spacer(Modifier.height(8.dp))
-        if (!isCompanionMode) {
+        run {
             val selected = top == Pane.Profile
             Box(
                 modifier = Modifier

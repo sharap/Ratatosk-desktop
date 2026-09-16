@@ -17,6 +17,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.toComposeImageBitmap
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -44,6 +45,7 @@ fun ProfileScreen(
     val onionAddress by viewModel.onionAddress.collectAsState()
     val cardVersion by viewModel.cardVersion.collectAsState()
     val myContactUri by viewModel.myContactUri.collectAsState()
+    val isCompanionMode by viewModel.isCompanionMode.collectAsState()
     val scope = rememberCoroutineScope()
     
     val snackbarHostState = remember { SnackbarHostState() }
@@ -103,10 +105,11 @@ fun ProfileScreen(
                                 }
                             }
                         },
-                        onEditName = {
+                        onEditName = if (isCompanionMode) null else ({
                             newName = userName ?: ""
                             showEditName = true
-                        }
+                        }),
+                        isCompact = false
                     )
 
                     Spacer(modifier = Modifier.height(32.dp))
@@ -128,18 +131,30 @@ fun ProfileScreen(
                         .weight(1f)
                         .verticalScroll(rememberScrollState())
                 ) {
-                    ProfileDetails(
-                        fingerprint = fingerprint,
-                        cardVersion = cardVersion,
-                        torEnabled = torEnabled,
-                        onionAddress = onionAddress,
-                        onShowQr = { showMyQr = true },
-                        onCopyLink = copyLink
-                    )
+                    if (isCompanionMode) {
+                        // Ключи, отпечаток и ссылка живут на телефоне: на втором
+                        // экране их нет, и показывать их было бы обманом.
+                        Box(Modifier.fillMaxSize().padding(32.dp), contentAlignment = Alignment.Center) {
+                            Text(
+                                text = Strings.PROFILE_COMPANION_DESC,
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    } else {
+                        ProfileDetails(
+                            fingerprint = fingerprint,
+                            cardVersion = cardVersion,
+                            torEnabled = torEnabled,
+                            onionAddress = onionAddress,
+                            onShowQr = { showMyQr = true },
+                            onCopyLink = copyLink
+                        )
 
-                    Spacer(modifier = Modifier.height(32.dp))
+                        Spacer(modifier = Modifier.height(32.dp))
 
-                    ProfileNotices(notices = notices)
+                        ProfileNotices(notices = notices)
+                    }
                 }
             }
         } else {
@@ -165,22 +180,31 @@ fun ProfileScreen(
                             }
                         }
                     },
-                    onEditName = {
+                    onEditName = if (isCompanionMode) null else ({
                         newName = userName ?: ""
                         showEditName = true
-                    }
+                    }),
+                    isCompact = true
                 )
-                
+
                 Spacer(modifier = Modifier.height(24.dp))
 
-                ProfileDetails(
-                    fingerprint = fingerprint,
-                    cardVersion = cardVersion,
-                    torEnabled = torEnabled,
-                    onionAddress = onionAddress,
-                    onShowQr = { showMyQr = true },
-                    onCopyLink = copyLink
-                )
+                if (isCompanionMode) {
+                    Text(
+                        text = Strings.PROFILE_COMPANION_DESC,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                } else {
+                    ProfileDetails(
+                        fingerprint = fingerprint,
+                        cardVersion = cardVersion,
+                        torEnabled = torEnabled,
+                        onionAddress = onionAddress,
+                        onShowQr = { showMyQr = true },
+                        onCopyLink = copyLink
+                    )
+                }
 
                 Spacer(modifier = Modifier.height(32.dp))
 
@@ -196,7 +220,7 @@ fun ProfileScreen(
 
                 Spacer(modifier = Modifier.height(32.dp))
 
-                ProfileNotices(notices = notices)
+                if (!isCompanionMode) ProfileNotices(notices = notices)
             }
         }
     }
@@ -292,13 +316,17 @@ fun ProfileHeader(
     myAvatar: ByteArray?,
     userName: String?,
     onEditAvatar: () -> Unit,
-    onEditName: () -> Unit
+    /** `null` — имя менять нельзя (у компаньона его задаёт телефон). */
+    onEditName: (() -> Unit)?,
+    isCompact: Boolean = false
 ) {
     Box(contentAlignment = Alignment.BottomEnd) {
         Avatar(
             avatarBytes = myAvatar,
             name = userName ?: "U",
-            size = 100.dp
+            modifier = if (isCompact) Modifier.fillMaxWidth().widthIn(max = 320.dp).aspectRatio(1f) else Modifier.size(200.dp),
+            size = null,
+            shape = RectangleShape
         )
         SmallFloatingActionButton(
             onClick = onEditAvatar,
@@ -318,8 +346,10 @@ fun ProfileHeader(
             style = MaterialTheme.typography.headlineSmall,
             fontWeight = FontWeight.Bold
         )
-        IconButton(onClick = onEditName) {
-            Icon(Icons.Default.Edit, contentDescription = Strings.EDIT, modifier = Modifier.size(20.dp))
+        if (onEditName != null) {
+            IconButton(onClick = onEditName) {
+                Icon(Icons.Default.Edit, contentDescription = Strings.EDIT, modifier = Modifier.size(20.dp))
+            }
         }
     }
 }
