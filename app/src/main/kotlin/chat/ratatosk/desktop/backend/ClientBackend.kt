@@ -229,6 +229,7 @@ class ClientBackend(val client: RatatoskClient) : Backend {
 
     override fun acceptFile(chatId: ByteArray, fileId: ByteArray) = changing(chatId) { client.acceptFile(fileId) }
     override fun declineFile(chatId: ByteArray, fileId: ByteArray) = changing(chatId) { client.declineFile(fileId) }
+    override fun pauseFile(chatId: ByteArray, fileId: ByteArray) = changing(chatId) { client.pauseFile(fileId) }
 
     override fun requestPreview(fileId: ByteArray) {
         emit(AppEvent.PreviewLoaded(fileId, client.previewOf(fileId)))

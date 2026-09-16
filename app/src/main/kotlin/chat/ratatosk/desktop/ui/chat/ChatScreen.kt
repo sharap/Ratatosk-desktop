@@ -478,8 +478,8 @@ private fun MessageItem(
         onReplyClick = replyId?.let { id -> { onJump(id) } },
         waitingNotice = waitingNotice,
         actions = actions,
-        attachments = { contentColor, accent ->
-            AttachmentList(message.raw.files, chatId, viewModel, contentColor, accent, onSaved)
+        attachments = { _, _ ->
+            AttachmentList(message.raw.files, chatId, viewModel, onSaved)
         },
     )
 }

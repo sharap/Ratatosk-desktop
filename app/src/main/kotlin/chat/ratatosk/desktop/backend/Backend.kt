@@ -69,6 +69,12 @@ interface Backend {
     // --- Вложения ---------------------------------------------------------
     fun acceptFile(chatId: ByteArray, fileId: ByteArray)
     fun declineFile(chatId: ByteArray, fileId: ByteArray)
+    /**
+     * Перестать качать входящий файл, не отказываясь от него: приехавшее
+     * остаётся, предложение живёт, и `acceptFile` продолжит с того же места
+     * (`FFI` о `pause_file`). Это не отказ — путать их нельзя.
+     */
+    fun pauseFile(chatId: ByteArray, fileId: ByteArray)
     fun requestPreview(fileId: ByteArray)
 
     /**

@@ -40,6 +40,8 @@ interface FilesApi {
     val downloadDirPath: StateFlow<String?>
     fun acceptFile(chatId: ByteArray, fileId: ByteArray)
     fun declineFile(chatId: ByteArray, fileId: ByteArray)
+    /** Остановить приём, не отказываясь: продолжит [acceptFile] с того же места. */
+    fun pauseFile(chatId: ByteArray, fileId: ByteArray)
     fun getFilePreview(fileId: ByteArray): ByteArray?
     fun saveFile(file: FfiFile, destination: File, onFailure: () -> Unit = {}, onComplete: (File) -> Unit)
     fun downloadFile(file: FfiFile, onComplete: (String) -> Unit)
@@ -100,6 +102,10 @@ class FilesModel(session: SessionContext) : FeatureModel(session), FilesApi {
 
     override fun declineFile(chatId: ByteArray, fileId: ByteArray) {
         session.io("Failed to decline file") { it.declineFile(chatId, fileId) }
+    }
+
+    override fun pauseFile(chatId: ByteArray, fileId: ByteArray) {
+        session.io("Failed to pause file") { it.pauseFile(chatId, fileId) }
     }
 
     override fun getFilePreview(fileId: ByteArray): ByteArray? {

@@ -14,7 +14,6 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.toComposeImageBitmap
 import androidx.compose.ui.layout.ContentScale
@@ -31,8 +30,6 @@ fun AttachmentList(
     files: List<FfiFile>,
     chatId: ByteArray,
     viewModel: RatatoskViewModel,
-    contentColor: Color,
-    accent: Color,
     onSaved: (String) -> Unit,
 ) {
     if (files.isEmpty()) return
@@ -53,10 +50,9 @@ fun AttachmentList(
                 sendFraction = sending[hex],
                 waitingText = waiting[hex],
                 saving = hex in jobs,
-                contentColor = contentColor,
-                accent = accent,
                 onAccept = { viewModel.acceptFile(chatId, file.fileId) },
                 onDecline = { viewModel.declineFile(chatId, file.fileId) },
+                onPause = { viewModel.pauseFile(chatId, file.fileId) },
                 // Картинку — своим просмотрщиком, остальное — системным приложением.
                 onOpen = { viewModel.openMedia(file) },
                 onSave = { viewModel.downloadFile(file, onSaved) },
@@ -74,20 +70,21 @@ private fun AttachmentCard(
     sendFraction: Float?,
     waitingText: String?,
     saving: Boolean,
-    contentColor: Color,
-    accent: Color,
     onAccept: () -> Unit,
     onDecline: () -> Unit,
+    onPause: () -> Unit,
     onOpen: () -> Unit,
     onSave: () -> Unit,
     onCancel: () -> Unit,
 ) {
     val available = file.complete || !file.incoming
+    // Приём остановлен: приехавшее на месте, предложение живёт (FFI, pause_file).
+    val paused = file.incoming && !file.accepted && file.receivedChunks > 0UL
     Column(
         Modifier
             .widthIn(min = 240.dp)
             .clip(RoundedCornerShape(10.dp))
-            .background(contentColor.copy(alpha = 0.08f))
+            .background(MaterialTheme.colorScheme.surface)
     ) {
         val bitmap = rememberPreview(preview)
         if (bitmap != null) {
@@ -102,27 +99,46 @@ private fun AttachmentCard(
                     .then(if (available) Modifier.clickable(onClick = onOpen) else Modifier),
             )
         }
+        // Подпись — на своей поверхности и своими цветами: раньше она брала
+        // полупрозрачный цвет пузыря, и на светлой картинке её было не разобрать.
+        val labelColor = MaterialTheme.colorScheme.onSurface
+        val subLabelColor = MaterialTheme.colorScheme.onSurfaceVariant
+        val actionColor = MaterialTheme.colorScheme.primary
         Row(Modifier.padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
-            Icon(iconFor(file.name), null, tint = accent, modifier = Modifier.size(28.dp))
+            Icon(iconFor(file.name), null, tint = actionColor, modifier = Modifier.size(28.dp))
             Spacer(Modifier.width(8.dp))
             Column(Modifier.weight(1f)) {
-                Text(file.name, style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis, color = contentColor)
-                Text(stateLine(file, receiveFraction, sendFraction), style = MaterialTheme.typography.labelSmall, color = contentColor.copy(alpha = 0.65f))
+                Text(file.name, style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis, color = labelColor)
+                Text(stateLine(file, receiveFraction, sendFraction, paused), style = MaterialTheme.typography.labelSmall, color = subLabelColor)
             }
             when {
                 saving -> {
-                    CircularProgressIndicator(progress = { receiveFraction }, modifier = Modifier.size(20.dp), strokeWidth = 2.dp, color = accent)
+                    CircularProgressIndicator(progress = { receiveFraction }, modifier = Modifier.size(20.dp), strokeWidth = 2.dp, color = actionColor)
                     IconButton(onClick = onCancel) { Icon(Icons.Default.Close, Strings.FILE_CANCEL, tint = MaterialTheme.colorScheme.error) }
                 }
                 file.incoming && !file.accepted && !file.complete -> {
                     IconButton(onClick = onDecline) { Icon(Icons.Default.Close, Strings.FILE_DECLINE, tint = MaterialTheme.colorScheme.error) }
-                    IconButton(onClick = onAccept) { Icon(Icons.Default.Download, Strings.FILE_ACCEPT, tint = accent) }
+                    // Остановленное продолжаем тем же `acceptFile` — с того же места.
+                    IconButton(onClick = onAccept) {
+                        if (paused) Icon(Icons.Default.PlayArrow, Strings.FILE_RESUME, tint = actionColor)
+                        else Icon(Icons.Default.Download, Strings.FILE_ACCEPT, tint = actionColor)
+                    }
                 }
                 available -> {
-                    IconButton(onClick = onOpen) { Icon(Icons.AutoMirrored.Filled.OpenInNew, Strings.FILE_OPEN, tint = accent) }
-                    IconButton(onClick = onSave) { Icon(Icons.Default.SaveAlt, Strings.FILE_SAVE, tint = accent) }
+                    IconButton(onClick = onOpen) { Icon(Icons.AutoMirrored.Filled.OpenInNew, Strings.FILE_OPEN, tint = actionColor) }
+                    IconButton(onClick = onSave) { Icon(Icons.Default.SaveAlt, Strings.FILE_SAVE, tint = actionColor) }
                 }
-                else -> CircularProgressIndicator(progress = { receiveFraction }, modifier = Modifier.size(20.dp), strokeWidth = 2.dp, color = accent)
+                // Качается: «остановить» в середине кольца. Прервать приём было
+                // нечем, а «Отклонить» выбросило бы уже приехавшее.
+                file.incoming -> Box(contentAlignment = Alignment.Center) {
+                    CircularProgressIndicator(progress = { receiveFraction }, modifier = Modifier.size(32.dp), strokeWidth = 2.dp, color = actionColor)
+                    IconButton(onClick = onPause, modifier = Modifier.size(24.dp)) {
+                        Icon(Icons.Default.Pause, Strings.FILE_PAUSE, tint = actionColor, modifier = Modifier.size(16.dp))
+                    }
+                }
+                // Своё исходящее остановить нечем: отказа от своей отправки
+                // на границе ядра нет.
+                else -> CircularProgressIndicator(progress = { receiveFraction }, modifier = Modifier.size(20.dp), strokeWidth = 2.dp, color = actionColor)
             }
         }
         // Стоит — словами ядра, почему: «ошибка» и «загрузка» здесь одинаково неправда.
@@ -130,17 +146,20 @@ private fun AttachmentCard(
             Text(
                 waitingText,
                 style = MaterialTheme.typography.labelSmall,
-                color = contentColor.copy(alpha = 0.75f),
+                color = subLabelColor,
                 modifier = Modifier.padding(start = 8.dp, end = 8.dp, bottom = 8.dp),
             )
         }
     }
 }
 
-private fun stateLine(file: FfiFile, receive: Float, send: Float?): String {
+private fun stateLine(file: FfiFile, receive: Float, send: Float?, paused: Boolean): String {
     val size = formatFileSize(file.sizeBytes)
     return when {
         !file.incoming && send != null && send < 1f -> "$size · " + Strings.FILE_SENDING.format((send * 100).toInt())
+        // «Остановлено», а не «отменено»: прочитавший «отменено» не станет
+        // продолжать то, что считает потерянным (FFI, pause_file).
+        paused -> "$size · " + Strings.FILE_PAUSED.format((receive * 100).toInt())
         file.incoming && file.accepted && !file.complete -> "$size · " + Strings.FILE_RECEIVING.format((receive * 100).toInt())
         else -> size
     }

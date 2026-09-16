@@ -154,6 +154,7 @@ class CompanionBackend(val companion: RatatoskCompanion) : Backend {
 
     override fun acceptFile(chatId: ByteArray, fileId: ByteArray) = companion.acceptFile(fileId)
     override fun declineFile(chatId: ByteArray, fileId: ByteArray) = companion.declineFile(fileId)
+    override fun pauseFile(chatId: ByteArray, fileId: ByteArray) = companion.pauseFile(fileId)
     override fun requestPreview(fileId: ByteArray) = companion.preview(fileId)
 
     /**

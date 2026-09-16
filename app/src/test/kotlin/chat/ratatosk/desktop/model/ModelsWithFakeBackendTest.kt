@@ -133,6 +133,15 @@ class ModelsWithFakeBackendTest {
     }
 
     @Test
+    fun pauseAndResumeReachBackend() {
+        val files = FilesModel(session)
+        files.pauseFile(chatA, msg1)
+        // Продолжение — тот же `acceptFile`: ядро качает с того же места.
+        files.acceptFile(chatA, msg1)
+        waitUntil { backend.calls.contains("pauseFile:${msg1.toHexString()}") && backend.calls.contains("accept") }
+    }
+
+    @Test
     fun clientOnlyFeaturesAreQuietInCompanionMode() {
         val contacts = ContactsModel(session)
         contacts.markVerified(ikA)
@@ -264,6 +273,7 @@ class ModelsWithFakeBackendTest {
         override fun clearChat(chatId: ByteArray) = rec("clearChat")
         override fun acceptFile(chatId: ByteArray, fileId: ByteArray) = rec("accept")
         override fun declineFile(chatId: ByteArray, fileId: ByteArray) = rec("decline")
+        override fun pauseFile(chatId: ByteArray, fileId: ByteArray) = rec("pauseFile:${fileId.toHexString()}")
         override fun requestPreview(fileId: ByteArray) = rec("preview")
         override suspend fun saveFile(file: FfiFile, destination: File) = rec("save")
     }
