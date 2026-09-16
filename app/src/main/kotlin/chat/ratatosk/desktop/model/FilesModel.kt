@@ -25,6 +25,9 @@ import org.ratatosk.core.FfiSwept
 import java.io.File
 import java.util.concurrent.ConcurrentHashMap
 
+/** Что открыто в просмотрщике: уже сохранённый на диск файл. */
+class ViewerMedia(val name: String, val file: File)
+
 interface FilesApi {
     val fileProgress: StateFlow<Map<String, Float>>
     val filePreviews: StateFlow<Map<String, ByteArray>>
@@ -41,6 +44,11 @@ interface FilesApi {
     fun saveFile(file: FfiFile, destination: File, onFailure: () -> Unit = {}, onComplete: (File) -> Unit)
     fun downloadFile(file: FfiFile, onComplete: (String) -> Unit)
     fun openFile(file: FfiFile)
+    /** Что показывает просмотрщик; `null` — окно закрыто. */
+    val viewerMedia: StateFlow<ViewerMedia?>
+    /** Картинку — своим просмотрщиком, остальное — системным приложением. */
+    fun openMedia(file: FfiFile)
+    fun closeViewer()
     fun cancelFileJob(fileId: ByteArray)
     fun sweepOrphanFiles(onResult: (FfiSwept) -> Unit)
     fun setAutoAcceptLimit(limit: ULong?)
@@ -68,6 +76,9 @@ class FilesModel(session: SessionContext) : FeatureModel(session), FilesApi {
 
     private val _fileWaiting = MutableStateFlow<Map<String, String>>(emptyMap())
     override val fileWaiting = _fileWaiting.asStateFlow()
+
+    private val _viewerMedia = MutableStateFlow<ViewerMedia?>(null)
+    override val viewerMedia = _viewerMedia.asStateFlow()
 
     private val _autoAcceptLimit = MutableStateFlow<ULong?>(null)
     override val autoAcceptLimit = _autoAcceptLimit.asStateFlow()
@@ -166,7 +177,7 @@ class FilesModel(session: SessionContext) : FeatureModel(session), FilesApi {
             downloadFile(file) { path -> FileUtils.openDirectory(File(path)) }
             return
         }
-        val destination = File(AppDirs.getMediaCacheDir(), "${file.fileId.toHexString()}_${FileUtils.safeName(file.name)}")
+        val destination = cacheFileFor(file)
 
         if (destination.exists() && destination.length() == file.sizeBytes.toLong()) {
             FileUtils.openFile(destination)
@@ -176,6 +187,22 @@ class FilesModel(session: SessionContext) : FeatureModel(session), FilesApi {
         saveFile(file, destination) {
             FileUtils.openFile(it)
         }
+    }
+
+    override fun openMedia(file: FfiFile) {
+        // Не картинка — дело системного приложения; исполняемое `openFile`
+        // не откроет вовсе, а положит в загрузки и покажет папку.
+        if (!FileUtils.isImage(file.name)) return openFile(file)
+        val destination = cacheFileFor(file)
+        if (destination.exists() && destination.length() == file.sizeBytes.toLong()) {
+            _viewerMedia.value = ViewerMedia(file.name, destination)
+            return
+        }
+        saveFile(file, destination) { _viewerMedia.value = ViewerMedia(file.name, it) }
+    }
+
+    override fun closeViewer() {
+        _viewerMedia.value = null
     }
 
     override fun cancelFileJob(fileId: ByteArray) {
@@ -237,9 +264,14 @@ class FilesModel(session: SessionContext) : FeatureModel(session), FilesApi {
         _fileSending.value = emptyMap()
         _fileWaiting.value = emptyMap()
         _filePreviews.value = emptyMap()
+        _viewerMedia.value = null
         _activeJobsFlow.value = emptySet()
         _autoAcceptLimit.value = null
     }
+
+    /** Имя во временном каталоге: по `fileId`, чтобы разные файлы не сталкивались. */
+    private fun cacheFileFor(file: FfiFile) =
+        File(AppDirs.getMediaCacheDir(), "${file.fileId.toHexString()}_${FileUtils.safeName(file.name)}")
 
     private companion object {
         const val TAG = "FilesModel"

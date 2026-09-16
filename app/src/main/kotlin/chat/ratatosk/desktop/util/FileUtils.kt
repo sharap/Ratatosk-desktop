@@ -76,6 +76,12 @@ object FileUtils {
      * имена устройств (`CON`, `NUL.txt`) и точки/пробелы в конце, которые
      * Windows молча отрезает.
      */
+    /** Картинка ли — по имени: только такие показываем своим просмотрщиком. */
+    fun isImage(name: String): Boolean =
+        name.substringAfterLast('.', "").lowercase() in IMAGE_EXTENSIONS
+
+    private val IMAGE_EXTENSIONS = setOf("jpg", "jpeg", "png", "gif", "webp", "bmp")
+
     fun safeName(raw: String?): String {
         var name = raw?.substringAfterLast('/')?.substringAfterLast('\\')?.trim().orEmpty()
         name = name.replace(FORBIDDEN_CHARS, "_").trimEnd('.', ' ')

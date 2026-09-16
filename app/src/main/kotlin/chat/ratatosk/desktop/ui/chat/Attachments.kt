@@ -57,7 +57,8 @@ fun AttachmentList(
                 accent = accent,
                 onAccept = { viewModel.acceptFile(chatId, file.fileId) },
                 onDecline = { viewModel.declineFile(chatId, file.fileId) },
-                onOpen = { viewModel.openFile(file) },
+                // Картинку — своим просмотрщиком, остальное — системным приложением.
+                onOpen = { viewModel.openMedia(file) },
                 onSave = { viewModel.downloadFile(file, onSaved) },
                 onCancel = { viewModel.cancelFileJob(file.fileId) },
             )

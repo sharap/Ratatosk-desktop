@@ -26,6 +26,21 @@ object ClipboardUtils {
         }
     }
 
+    /** Картинку — в буфер, чтобы вставить её в другое приложение. */
+    fun copyImage(image: java.awt.Image) {
+        val transferable = object : java.awt.datatransfer.Transferable {
+            override fun getTransferDataFlavors() = arrayOf(java.awt.datatransfer.DataFlavor.imageFlavor)
+            override fun isDataFlavorSupported(flavor: java.awt.datatransfer.DataFlavor) =
+                flavor == java.awt.datatransfer.DataFlavor.imageFlavor
+            override fun getTransferData(flavor: java.awt.datatransfer.DataFlavor): Any {
+                if (!isDataFlavorSupported(flavor)) throw java.awt.datatransfer.UnsupportedFlavorException(flavor)
+                return image
+            }
+        }
+        runCatching { java.awt.Toolkit.getDefaultToolkit().systemClipboard.setContents(transferable, null) }
+            .onFailure { Log.w("ClipboardUtils", "Failed to copy image", it) }
+    }
+
     fun copyToClipboard(text: String) {
         try {
             val selection = StringSelection(text)

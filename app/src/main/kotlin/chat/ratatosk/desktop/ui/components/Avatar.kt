@@ -14,7 +14,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
-import coil3.compose.rememberAsyncImagePainter
+import androidx.compose.runtime.remember
+import androidx.compose.ui.graphics.toComposeImageBitmap
 
 /**
  * Лицо человека или группы.
@@ -36,9 +37,16 @@ fun Avatar(
         shape = shape,
         color = MaterialTheme.colorScheme.secondaryContainer
     ) {
-        if (avatarBytes != null) {
+        // Ключ — по содержимому: `ByteArray` сравнивается по ссылке, и на каждый
+        // ответ ядра с тем же лицом картинка декодировалась заново (ревью A 29-66).
+        val bitmap = remember(avatarBytes?.contentHashCode()) {
+            avatarBytes?.let {
+                runCatching { org.jetbrains.skia.Image.makeFromEncoded(it).toComposeImageBitmap() }.getOrNull()
+            }
+        }
+        if (bitmap != null) {
             Image(
-                painter = rememberAsyncImagePainter(model = avatarBytes),
+                bitmap = bitmap,
                 contentDescription = name,
                 modifier = Modifier.fillMaxSize().clip(shape),
                 contentScale = ContentScale.Crop

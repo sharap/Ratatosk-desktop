@@ -17,6 +17,7 @@ import chat.ratatosk.desktop.ui.onboarding.OnboardingScreen
 import chat.ratatosk.desktop.ui.unlock.AccountSelectionScreen
 import chat.ratatosk.desktop.ui.unlock.UnlockScreen
 import chat.ratatosk.desktop.ui.main.MainScreen
+import chat.ratatosk.desktop.ui.media.MediaViewerWindow
 import chat.ratatosk.desktop.util.DesktopNotifier
 import chat.ratatosk.desktop.util.NotificationIcon
 import chat.ratatosk.desktop.util.TrayNotifier
@@ -77,6 +78,14 @@ fun main() = application {
             )
         }
     )
+
+    // Просмотр картинки — своим окном: чат рядом остаётся живым.
+    val viewerMedia by viewModel.viewerMedia.collectAsState()
+    viewerMedia?.let { media ->
+        RatatoskTheme(themeColor = chatTheme.themeColor) {
+            MediaViewerWindow(media = media, onClose = { viewModel.closeViewer() })
+        }
+    }
 
     Window(
         onCloseRequest = { isWindowVisible = false },
