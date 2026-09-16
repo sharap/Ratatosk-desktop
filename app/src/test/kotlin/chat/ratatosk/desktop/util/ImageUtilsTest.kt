@@ -18,6 +18,46 @@ class ImageUtilsTest {
     }
 
     @Test
+    fun cropRectFollowsScaleAndDrag() {
+        // Масштаб 1 — виден квадрат по меньшей стороне, по центру широкой картинки.
+        val whole = ImageUtils.avatarCropRect(1000, 600, scale = 1f, offsetXpx = 0f, offsetYpx = 0f, viewportPx = 280)
+        assertEquals(600, whole.size)
+        assertEquals(200, whole.x)
+        assertEquals(0, whole.y)
+
+        // Увеличили вдвое — берём вдвое меньший квадрат, всё ещё по центру.
+        val zoomed = ImageUtils.avatarCropRect(1000, 600, scale = 2f, offsetXpx = 0f, offsetYpx = 0f, viewportPx = 280)
+        assertEquals(300, zoomed.size)
+        assertEquals(350, zoomed.x)
+        assertEquals(150, zoomed.y)
+
+        // Потянули картинку вправо — кадр уехал влево, на то же число пикселей исходника.
+        val dragged = ImageUtils.avatarCropRect(1000, 600, scale = 2f, offsetXpx = 140f, offsetYpx = 0f, viewportPx = 280)
+        assertEquals(350 - 150, dragged.x)
+
+        // За край не выходим ни при каком сдвиге.
+        val far = ImageUtils.avatarCropRect(1000, 600, scale = 1f, offsetXpx = -100000f, offsetYpx = 100000f, viewportPx = 280)
+        assertEquals(1000 - 600, far.x)
+        assertEquals(0, far.y)
+    }
+
+    @Test
+    fun croppedAvatarIsSquareAndWithinLimit() {
+        val file = image(800, 400)
+        try {
+            val source = ImageUtils.readImageBounded(file, maxSide = 1024)!!
+            val rect = ImageUtils.avatarCropRect(source.width, source.height, 1f, 0f, 0f, 280)
+            val bytes = ImageUtils.cropAvatar(source, rect, maxBytes = 32 * 1024)!!
+            assertTrue(bytes.size <= 32 * 1024)
+            val decoded = ImageIO.read(bytes.inputStream())
+            assertEquals(256, decoded.width)
+            assertEquals(256, decoded.height)
+        } finally {
+            file.delete()
+        }
+    }
+
+    @Test
     fun largeImageIsSubsampledOnRead() {
         val file = image(4000, 3000)
         try {

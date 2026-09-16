@@ -402,6 +402,13 @@ object Strings {
     const val MEDIA_ZOOM_OUT = "Уменьшить"
     const val MEDIA_COPY = "Копировать картинку"
     const val MEDIA_CANNOT_SHOW = "Не удалось прочитать картинку"
+
+    // Кадрирование аватарки
+    const val AVATAR_CROP_TITLE = "Фото профиля"
+    const val AVATAR_CROP_GROUP_TITLE = "Картинка группы"
+    const val AVATAR_CROP_HINT = "Колесо мыши — масштаб, перетаскивание — сдвиг"
+    const val AVATAR_CROP_FAILED = "Не удалось подготовить картинку — прежняя осталась на месте"
+    const val AVATAR_CHANGE = "Сменить картинку"
     const val PROFILE_COMPANION_DESC = "Это второй экран телефона: ключи, отпечаток и ссылка-приглашение живут на телефоне. Фото профиля можно посмотреть и сменить здесь — оно уйдёт на телефон. Имя задаётся на телефоне."
     const val CONTACT_COMPANION_DESC = "Второй экран показывает только имя и фото: ключей и сверки личности на нём нет. Подтвердить личность можно на телефоне."
 

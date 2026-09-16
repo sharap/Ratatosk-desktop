@@ -9,6 +9,9 @@ import javax.imageio.IIOImage
 import javax.imageio.ImageIO
 import javax.imageio.ImageWriteParam
 
+/** Квадрат кадра в пикселях исходника. */
+class CropRect(val x: Int, val y: Int, val size: Int)
+
 object ImageUtils {
     private const val TAG = "ImageUtils"
 
@@ -51,6 +54,64 @@ object ImageUtils {
             Log.w(TAG, "Failed to read image", e)
             null
         }
+    }
+
+    /**
+     * Какой квадрат исходника видно в окошке кадрирования.
+     *
+     * В окошке картинка лежит «по меньшей стороне» (при [scale] = 1 видно
+     * её целиком по короткой стороне), [offsetXpx] и [offsetYpx] — сдвиг
+     * мышью в пикселях окошка. Чистая функция — считается без картинки
+     * и проверяется тестом.
+     */
+    fun avatarCropRect(
+        imageW: Int,
+        imageH: Int,
+        scale: Float,
+        offsetXpx: Float,
+        offsetYpx: Float,
+        viewportPx: Int,
+    ): CropRect {
+        val shorter = minOf(imageW, imageH)
+        // Сторона кадра в пикселях исходника: увеличили вдвое — берём вдвое меньше.
+        val size = (shorter / scale.coerceAtLeast(0.01f)).toInt().coerceIn(1, shorter)
+        val perViewPx = size.toFloat() / viewportPx.coerceAtLeast(1)
+        val centerX = imageW / 2f - offsetXpx * perViewPx
+        val centerY = imageH / 2f - offsetYpx * perViewPx
+        // За край не выходим: иначе в кадр попала бы пустота.
+        val x = (centerX - size / 2f).toInt().coerceIn(0, imageW - size)
+        val y = (centerY - size / 2f).toInt().coerceIn(0, imageH - size)
+        return CropRect(x, y, size)
+    }
+
+    /**
+     * Готовит аватарку по выбранному кадру: квадрат 256×256 и JPEG в пределах
+     * [maxBytes]. `null` — не получилось; в этом случае звать `setAvatar(null)`
+     * нельзя, это стёрло бы прежнее лицо (ревью 2.7).
+     */
+    fun cropAvatar(image: BufferedImage, rect: CropRect, maxBytes: Int): ByteArray? {
+        return try {
+            val size = rect.size.coerceAtMost(minOf(image.width - rect.x, image.height - rect.y))
+            val cropped = image.getSubimage(rect.x, rect.y, size, size)
+            compressToJpeg(scaleTo(cropped, 256), maxBytes)
+        } catch (e: OutOfMemoryError) {
+            Log.w(TAG, "Out of memory while cropping avatar")
+            null
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to crop avatar", e)
+            null
+        }
+    }
+
+    private fun scaleTo(source: BufferedImage, targetSize: Int): BufferedImage {
+        val resized = BufferedImage(targetSize, targetSize, BufferedImage.TYPE_INT_RGB)
+        val g: Graphics2D = resized.createGraphics()
+        g.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BICUBIC)
+        g.setRenderingHint(RenderingHints.KEY_RENDERING, RenderingHints.VALUE_RENDER_QUALITY)
+        g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON)
+        g.drawImage(source, 0, 0, targetSize, targetSize, null)
+        g.dispose()
+        return resized
     }
 
     fun processAvatar(file: File, maxBytes: Int): ByteArray? {

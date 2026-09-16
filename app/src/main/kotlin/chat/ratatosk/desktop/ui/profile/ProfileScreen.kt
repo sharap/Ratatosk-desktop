@@ -24,11 +24,14 @@ import androidx.compose.ui.unit.dp
 import chat.ratatosk.desktop.ui.RatatoskViewModel
 import chat.ratatosk.desktop.ui.Strings
 import chat.ratatosk.desktop.ui.components.Avatar
+import chat.ratatosk.desktop.ui.components.AvatarCropDialog
 import chat.ratatosk.desktop.util.ClipboardUtils
 import chat.ratatosk.desktop.util.FilePicker
 import chat.ratatosk.desktop.util.ImageUtils
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import java.io.File
 import qrcode.QRCode
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -56,6 +59,15 @@ fun ProfileScreen(
     }
 
     var showMyQr by remember { mutableStateOf(false) }
+    // Выбор файла — в своей корутине: системный диалог блокирует поток.
+    var pickAvatar by remember { mutableStateOf(false) }
+    var cropFile by remember { mutableStateOf<File?>(null) }
+    LaunchedEffect(pickAvatar) {
+        if (!pickAvatar) return@LaunchedEffect
+        val picked = withContext(Dispatchers.IO) { FilePicker.pickImage() }
+        pickAvatar = false
+        if (picked != null) cropFile = picked
+    }
     var showEditName by remember { mutableStateOf(false) }
     var newName by remember { mutableStateOf("") }
 
@@ -94,17 +106,7 @@ fun ProfileScreen(
                     ProfileHeader(
                         myAvatar = myAvatar,
                         userName = userName,
-                        onEditAvatar = {
-                            scope.launch(Dispatchers.IO) {
-                                FilePicker.pickImage()?.let { file ->
-                                    val maxBytes = viewModel.maxAvatarBytes.value
-                                    val processed = ImageUtils.processAvatar(file, maxBytes)
-                                    if (processed != null) {
-                                        viewModel.setAvatar(processed)
-                                    }
-                                }
-                            }
-                        },
+                        onEditAvatar = { pickAvatar = true },
                         onEditName = if (isCompanionMode) null else ({
                             newName = userName ?: ""
                             showEditName = true
@@ -169,17 +171,7 @@ fun ProfileScreen(
                 ProfileHeader(
                     myAvatar = myAvatar,
                     userName = userName,
-                    onEditAvatar = {
-                        scope.launch(Dispatchers.IO) {
-                            FilePicker.pickImage()?.let { file ->
-                                val maxBytes = viewModel.maxAvatarBytes.value
-                                val processed = ImageUtils.processAvatar(file, maxBytes)
-                                if (processed != null) {
-                                    viewModel.setAvatar(processed)
-                                }
-                            }
-                        }
-                    },
+                    onEditAvatar = { pickAvatar = true },
                     onEditName = if (isCompanionMode) null else ({
                         newName = userName ?: ""
                         showEditName = true
@@ -223,6 +215,16 @@ fun ProfileScreen(
                 if (!isCompanionMode) ProfileNotices(notices = notices)
             }
         }
+    }
+
+    cropFile?.let { file ->
+        AvatarCropDialog(
+            file = file,
+            maxBytes = viewModel.maxAvatarBytes.value,
+            onDismiss = { cropFile = null },
+            onResult = { viewModel.setAvatar(it) },
+            onError = { message -> scope.launch { snackbarHostState.showSnackbar(message) } },
+        )
     }
 
     if (showEditName) {

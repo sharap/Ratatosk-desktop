@@ -10,6 +10,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Chat
 import androidx.compose.material.icons.automirrored.filled.Logout
+import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Groups
@@ -19,14 +20,21 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import chat.ratatosk.desktop.backend.GroupMember
 import chat.ratatosk.desktop.ui.RatatoskViewModel
 import chat.ratatosk.desktop.ui.Strings
 import chat.ratatosk.desktop.ui.components.Avatar
+import chat.ratatosk.desktop.ui.components.AvatarCropDialog
 import chat.ratatosk.desktop.ui.components.CreateGroupDialog
+import chat.ratatosk.desktop.util.FilePicker
 import chat.ratatosk.desktop.util.toHexString
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import java.io.File
 import java.text.DateFormat
 import java.util.Date
 
@@ -57,6 +65,28 @@ fun GroupDetailsScreen(
     // Права компаньона приходят вместе с составом — пересчитать, когда он пришёл.
     val canManage = remember(group, members) { viewModel.canManageGroup(chatId) }
     val notices = viewModel.groupNotices
+    val scope = rememberCoroutineScope()
+    val snackbar = remember { SnackbarHostState() }
+    // Системный диалог блокирует поток — выбираем файл вне отрисовки.
+    var pickAvatar by remember { mutableStateOf(false) }
+    var cropFile by remember { mutableStateOf<File?>(null) }
+    LaunchedEffect(pickAvatar) {
+        if (!pickAvatar) return@LaunchedEffect
+        val picked = withContext(Dispatchers.IO) { FilePicker.pickImage() }
+        pickAvatar = false
+        if (picked != null) cropFile = picked
+    }
+
+    cropFile?.let { file ->
+        AvatarCropDialog(
+            file = file,
+            maxBytes = viewModel.maxAvatarBytes.value,
+            title = Strings.AVATAR_CROP_GROUP_TITLE,
+            onDismiss = { cropFile = null },
+            onResult = { viewModel.setGroupAvatar(chatId, it) },
+            onError = { message -> scope.launch { snackbar.showSnackbar(message) } },
+        )
+    }
 
     var showRename by remember { mutableStateOf(false) }
     var showInvite by remember { mutableStateOf(false) }
@@ -67,6 +97,7 @@ fun GroupDetailsScreen(
     LaunchedEffect(hex) { viewModel.loadMembers(chatId) }
 
     Scaffold(
+        snackbarHost = { SnackbarHost(snackbar) },
         topBar = {
             TopAppBar(
                 title = { Text(Strings.GROUP_INFO) },
@@ -96,16 +127,33 @@ fun GroupDetailsScreen(
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             val avatar = groupAvatars[hex] ?: viewModel.getGroupAvatar(chatId)
-            if (avatar != null) {
-                Avatar(avatarBytes = avatar, name = group.title, size = 96.dp)
-            } else {
-                Surface(
-                    modifier = Modifier.size(96.dp),
-                    shape = androidx.compose.foundation.shape.CircleShape,
-                    color = MaterialTheme.colorScheme.tertiaryContainer
-                ) {
-                    Box(contentAlignment = Alignment.Center) {
-                        Icon(Icons.Default.Groups, null, modifier = Modifier.size(48.dp), tint = MaterialTheme.colorScheme.onTertiaryContainer)
+            // Картинку группы меняет только тот, кто ей распоряжается (DESKTOP.md).
+            Box(contentAlignment = Alignment.BottomEnd) {
+                if (avatar != null) {
+                    Avatar(
+                        avatarBytes = avatar,
+                        name = group.title,
+                        modifier = Modifier.size(160.dp),
+                        size = null,
+                        shape = RectangleShape
+                    )
+                } else {
+                    Surface(
+                        modifier = Modifier.size(160.dp),
+                        shape = RectangleShape,
+                        color = MaterialTheme.colorScheme.tertiaryContainer
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Icon(Icons.Default.Groups, null, modifier = Modifier.size(64.dp), tint = MaterialTheme.colorScheme.onTertiaryContainer)
+                        }
+                    }
+                }
+                if (canManage) {
+                    SmallFloatingActionButton(
+                        onClick = { pickAvatar = true },
+                        containerColor = MaterialTheme.colorScheme.primaryContainer
+                    ) {
+                        Icon(Icons.Default.CameraAlt, contentDescription = Strings.AVATAR_CHANGE, modifier = Modifier.size(18.dp))
                     }
                 }
             }
