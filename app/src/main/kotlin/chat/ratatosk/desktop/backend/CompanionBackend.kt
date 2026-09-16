@@ -2,6 +2,8 @@ package chat.ratatosk.desktop.backend
 
 import chat.ratatosk.desktop.core.RatatoskCore
 import chat.ratatosk.desktop.util.Log
+import chat.ratatosk.desktop.ui.Strings
+import chat.ratatosk.desktop.util.hexToByteArray
 import chat.ratatosk.desktop.util.toHexString
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
@@ -38,6 +40,10 @@ class CompanionBackend(val companion: RatatoskCompanion) : Backend {
 
     /** Сохранения, ждущие `FileSaved` от ядра. */
     private val pendingSaves = ConcurrentHashMap<String, CompletableDeferred<Unit>>()
+
+    /** Какое вложение забираем сейчас: ядро берёт по одному за раз. */
+    private fun pendingSaveId(): ByteArray? =
+        pendingSaves.keys.firstOrNull()?.hexToByteArray()
 
     private fun failPendingSaves(reason: String) {
         val waiting = pendingSaves.values.toList()
@@ -112,8 +118,20 @@ class CompanionBackend(val companion: RatatoskCompanion) : Backend {
             }
             is FfiCompanionEvent.FilePreview -> emit(AppEvent.PreviewLoaded(event.fileId, event.bytes))
             is FfiCompanionEvent.FileSaved -> {
-                emit(AppEvent.FileProgress(event.fileId, 1f))
+                emit(AppEvent.SaveProgress(event.fileId, 1f))
+                emit(AppEvent.FileWaiting(event.fileId, null))
                 pendingSaves.remove(event.fileId.toHexString())?.complete(Unit)
+            }
+            // Приём не сорвался, а ждёт: записанное лежит в файле с припиской
+            // `.part` и допишется с того же места (FFI, FetchPaused).
+            is FfiCompanionEvent.FetchPaused -> pendingSaveId()?.let {
+                emit(AppEvent.FileWaiting(it, Strings.FILE_WAITING_PHONE))
+            }
+            is FfiCompanionEvent.FetchResumed -> pendingSaveId()?.let { id ->
+                emit(AppEvent.FileWaiting(id, null))
+                if (event.total > 0UL) {
+                    emit(AppEvent.SaveProgress(id, (event.done.toFloat() / event.total.toFloat()).coerceIn(0f, 1f)))
+                }
             }
             is FfiCompanionEvent.FileGone -> {
                 pendingSaves.remove(event.fileId.toHexString())

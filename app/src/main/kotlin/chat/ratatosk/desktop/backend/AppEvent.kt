@@ -68,7 +68,13 @@ sealed interface AppEvent {
     data class StatusChanged(val msgId: ByteArray, val status: FfiDeliveryStatus) : AppEvent
 
     // --- Вложения ---------------------------------------------------------
+    /** Сколько вложения собрано **у владельца файла** (у нас или у телефона). */
     data class FileProgress(val fileId: ByteArray, val fraction: Float) : AppEvent
+    /**
+     * Сколько вложения уже легло **на этот компьютер**: у компаньона это
+     * отдельный ход — телефон мог собрать файл целиком, а сюда он ещё едет.
+     */
+    data class SaveProgress(val fileId: ByteArray, val fraction: Float) : AppEvent
     data class PreviewLoaded(val fileId: ByteArray, val bytes: ByteArray?) : AppEvent
     /** Исходящее вложение: какая доля отдана собеседнику. */
     data class FileSending(val fileId: ByteArray, val fraction: Float) : AppEvent

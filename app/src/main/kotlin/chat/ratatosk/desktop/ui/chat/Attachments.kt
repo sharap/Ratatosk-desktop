@@ -37,6 +37,7 @@ fun AttachmentList(
     val sending by viewModel.fileSending.collectAsState()
     val waiting by viewModel.fileWaiting.collectAsState()
     val jobs by viewModel.activeJobsFlow.collectAsState()
+    val saveFractions by viewModel.saveProgress.collectAsState()
     val previews by viewModel.filePreviews.collectAsState()
 
     Column(Modifier.padding(bottom = 4.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -54,6 +55,9 @@ fun AttachmentList(
                 sendFraction = sending[hex],
                 waitingText = waiting[hex],
                 saving = hex in jobs,
+                // Ход выкладывания на этот компьютер — свой: у компаньона телефон
+                // давно собрал файл целиком, а сюда он ещё едет.
+                saveFraction = saveFractions[hex],
                 onAccept = { viewModel.acceptFile(chatId, file.fileId) },
                 onDecline = { viewModel.declineFile(chatId, file.fileId) },
                 onPause = { viewModel.pauseFile(chatId, file.fileId) },
@@ -75,6 +79,7 @@ private fun AttachmentCard(
     sendFraction: Float?,
     waitingText: String?,
     saving: Boolean,
+    saveFraction: Float?,
     onAccept: () -> Unit,
     onDecline: () -> Unit,
     onPause: () -> Unit,
@@ -115,11 +120,20 @@ private fun AttachmentCard(
             Spacer(Modifier.width(8.dp))
             Column(Modifier.weight(1f)) {
                 Text(file.name, style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis, color = labelColor)
-                Text(stateLine(file, receiveFraction, sendFraction, paused, complete), style = MaterialTheme.typography.labelSmall, color = subLabelColor)
+                Text(
+                    stateLine(file, receiveFraction, sendFraction, paused, complete, saving, saveFraction),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = subLabelColor,
+                )
             }
             when {
                 saving -> {
-                    CircularProgressIndicator(progress = { receiveFraction }, modifier = Modifier.size(20.dp), strokeWidth = 2.dp, color = actionColor)
+                    // Доли ещё нет — честнее крутилка без числа, чем чужие сто процентов.
+                    if (saveFraction == null) {
+                        CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp, color = actionColor)
+                    } else {
+                        CircularProgressIndicator(progress = { saveFraction }, modifier = Modifier.size(20.dp), strokeWidth = 2.dp, color = actionColor)
+                    }
                     IconButton(onClick = onCancel) { Icon(Icons.Default.Close, Strings.FILE_CANCEL, tint = MaterialTheme.colorScheme.error) }
                 }
                 file.incoming && !file.accepted && !complete -> {
@@ -159,9 +173,20 @@ private fun AttachmentCard(
     }
 }
 
-private fun stateLine(file: FfiFile, receive: Float, send: Float?, paused: Boolean, complete: Boolean): String {
+private fun stateLine(
+    file: FfiFile,
+    receive: Float,
+    send: Float?,
+    paused: Boolean,
+    complete: Boolean,
+    saving: Boolean,
+    saveFraction: Float?,
+): String {
     val size = formatFileSize(file.sizeBytes)
     return when {
+        // Пока файл едет на этот компьютер, показываем именно это.
+        saving && saveFraction != null -> "$size · " + Strings.FILE_FETCHING.format((saveFraction * 100).toInt())
+        saving -> "$size · " + Strings.FILE_FETCHING_UNKNOWN
         !file.incoming && send != null && send < 1f -> "$size · " + Strings.FILE_SENDING.format((send * 100).toInt())
         // «Остановлено», а не «отменено»: прочитавший «отменено» не станет
         // продолжать то, что считает потерянным (FFI, pause_file).

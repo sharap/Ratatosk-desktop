@@ -133,6 +133,18 @@ class ModelsWithFakeBackendTest {
     }
 
     @Test
+    fun receiveAndFetchProgressDoNotMix() {
+        val files = FilesModel(session)
+        // Телефон собрал файл целиком — это не значит, что он уже здесь.
+        files.onEvent(AppEvent.FileProgress(msg1, 1f))
+        assertEquals(1f, files.fileProgress.value[msg1.toHexString()])
+        assertNull(files.saveProgress.value[msg1.toHexString()])
+
+        files.onEvent(AppEvent.SaveProgress(msg1, 0.25f))
+        assertEquals(0.25f, files.saveProgress.value[msg1.toHexString()])
+    }
+
+    @Test
     fun pauseAndResumeReachBackend() {
         val files = FilesModel(session)
         files.pauseFile(chatA, msg1)

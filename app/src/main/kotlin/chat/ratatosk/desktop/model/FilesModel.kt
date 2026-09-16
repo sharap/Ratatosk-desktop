@@ -6,7 +6,10 @@ import chat.ratatosk.desktop.util.FileUtils
 import chat.ratatosk.desktop.util.Log
 import chat.ratatosk.desktop.util.toHexString
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
@@ -36,6 +39,12 @@ interface FilesApi {
     val fileSending: StateFlow<Map<String, Float>>
     /** Стоящие передачи: слова ядра о причине, по `fileId` в hex. */
     val fileWaiting: StateFlow<Map<String, String>>
+    /**
+     * Сколько вложения уже легло на этот компьютер, по `fileId` в hex.
+     * У компаньона это отдельный ход: телефон давно собрал файл целиком,
+     * а сюда он ещё едет — [fileProgress] про это ничего не знает.
+     */
+    val saveProgress: StateFlow<Map<String, Float>>
     val autoAcceptLimit: StateFlow<ULong?>
     val downloadDirPath: StateFlow<String?>
     fun acceptFile(chatId: ByteArray, fileId: ByteArray)
@@ -78,6 +87,9 @@ class FilesModel(session: SessionContext) : FeatureModel(session), FilesApi {
 
     private val _fileWaiting = MutableStateFlow<Map<String, String>>(emptyMap())
     override val fileWaiting = _fileWaiting.asStateFlow()
+
+    private val _saveProgress = MutableStateFlow<Map<String, Float>>(emptyMap())
+    override val saveProgress = _saveProgress.asStateFlow()
 
     private val _viewerMedia = MutableStateFlow<ViewerMedia?>(null)
     override val viewerMedia = _viewerMedia.asStateFlow()
@@ -138,10 +150,13 @@ class FilesModel(session: SessionContext) : FeatureModel(session), FilesApi {
         lateinit var job: Job
         job = scope.launch(Dispatchers.IO, start = CoroutineStart.LAZY) {
             var saved = false
+            // Прошлая доля того же файла ввела бы в заблуждение: начинаем с чистого.
+            _saveProgress.update { it - fileIdHex }
+            val watcher = if (backend.isCompanion) launchPartWatcher(file, destination) else null
             try {
                 backend.saveFile(file, destination)
                 saved = true
-                _fileProgress.update { it + (fileIdHex to 1f) }
+                _saveProgress.update { it + (fileIdHex to 1f) }
                 withContext(Dispatchers.Main) { onComplete(destination) }
             } catch (e: CancellationException) {
                 throw e
@@ -149,6 +164,7 @@ class FilesModel(session: SessionContext) : FeatureModel(session), FilesApi {
                 Log.w(TAG, "Failed to save file", e)
                 session._error.value = "Failed to save file: ${e.message}"
             } finally {
+                watcher?.cancel()
                 if (!saved) scope.launch { onFailure() }
                 // Снимаем только свою регистрацию: повторный запуск для того же
                 // файла уже положил сюда новую задачу.
@@ -160,6 +176,32 @@ class FilesModel(session: SessionContext) : FeatureModel(session), FilesApi {
         activeJobs.put(fileIdHex, job)?.cancel()
         _activeJobsFlow.update { it + fileIdHex }
         job.start()
+    }
+
+    /**
+     * Следит за растущим файлом и переводит его размер в долю.
+     *
+     * Ядро пишет вложение в файл с припиской `.part` и до конца приёма
+     * ничего о ходе не сообщает: события компаньона говорят только о том,
+     * сколько собрал **телефон**, — а это давно сто процентов.
+     */
+    private fun CoroutineScope.launchPartWatcher(file: FfiFile, destination: File): Job {
+        val hex = file.fileId.toHexString()
+        val total = file.sizeBytes.toLong()
+        val part = File(destination.parentFile, destination.name + ".part")
+        return launch(Dispatchers.IO) {
+            while (isActive) {
+                val written = when {
+                    part.exists() -> part.length()
+                    destination.exists() -> destination.length()
+                    else -> 0L
+                }
+                if (total > 0) {
+                    _saveProgress.update { it + (hex to (written.toFloat() / total).coerceIn(0f, 1f)) }
+                }
+                delay(400)
+            }
+        }
     }
 
     override fun downloadFile(file: FfiFile, onComplete: (String) -> Unit) {
@@ -243,6 +285,9 @@ class FilesModel(session: SessionContext) : FeatureModel(session), FilesApi {
             is AppEvent.FileProgress -> {
                 _fileProgress.update { it + (event.fileId.toHexString() to event.fraction) }
             }
+            is AppEvent.SaveProgress -> {
+                _saveProgress.update { it + (event.fileId.toHexString() to event.fraction) }
+            }
             is AppEvent.FileSending -> {
                 val hex = event.fileId.toHexString()
                 _fileSending.update { it + (hex to event.fraction) }
@@ -269,6 +314,7 @@ class FilesModel(session: SessionContext) : FeatureModel(session), FilesApi {
         _fileProgress.value = emptyMap()
         _fileSending.value = emptyMap()
         _fileWaiting.value = emptyMap()
+        _saveProgress.value = emptyMap()
         _filePreviews.value = emptyMap()
         _viewerMedia.value = null
         _activeJobsFlow.value = emptySet()

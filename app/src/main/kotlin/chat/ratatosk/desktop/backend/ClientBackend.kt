@@ -253,7 +253,7 @@ class ClientBackend(val client: RatatoskClient) : Backend {
                     currentCoroutineContext().ensureActive()
                     val chunk = reader.chunk(i) ?: throw IllegalStateException("File is incomplete")
                     output.write(chunk)
-                    emit(AppEvent.FileProgress(file.fileId, (i + 1UL).toFloat() / total.toFloat()))
+                    emit(AppEvent.SaveProgress(file.fileId, (i + 1UL).toFloat() / total.toFloat()))
                 }
             }
             Files.move(part.toPath(), destination.toPath(), StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE)
