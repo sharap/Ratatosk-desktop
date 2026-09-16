@@ -91,7 +91,9 @@ class ContactsModel(session: SessionContext) : FeatureModel(session), ContactsAp
                 _fingerprint.value = fingerprint
             }
             backend.requestChats()
-            backend.requestAvatar(null)
+            // Компаньон спросит своё лицо, когда телефон окажется на линии:
+            // до `Linked` спрашивать некого, и запрос уходил в пустоту.
+            if (!backend.isCompanion) backend.requestAvatar(null)
         }
     }
 
@@ -224,6 +226,8 @@ class ContactsModel(session: SessionContext) : FeatureModel(session), ContactsAp
                     _contactAvatars.update { if (bytes != null) it + (hex to bytes) else it - hex }
                 }
             }
+            // «Свою — раз за подключение: метки для сравнения у неё нет» (FFI, `avatar`).
+            is AppEvent.Linked -> session.io("Failed to load own avatar") { it.requestAvatar(null) }
             is AppEvent.AvatarChanged -> {
                 Log.d(TAG, "avatar changed: ${if (event.chatId == null) "own" else "chat"}")
                 val chatId = event.chatId

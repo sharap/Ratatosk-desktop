@@ -104,6 +104,14 @@ class ModelsWithFakeBackendTest {
     }
 
     @Test
+    fun ownAvatarIsRequestedWhenPhoneLinks() {
+        val contacts = ContactsModel(session)
+        // До связи с телефоном спрашивать некого — своё лицо не грузилось вовсе.
+        contacts.onEvent(AppEvent.Linked)
+        waitUntil { backend.calls.contains("requestAvatar:null") }
+    }
+
+    @Test
     fun avatarIsRequestedAgainWhenItsStampChanges() {
         val contacts = ContactsModel(session)
         val hex = chatA.toHexString()
