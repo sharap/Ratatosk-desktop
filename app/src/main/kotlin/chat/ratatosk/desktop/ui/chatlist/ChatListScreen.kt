@@ -12,6 +12,8 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Groups
 import androidx.compose.material.icons.filled.PersonAdd
 import androidx.compose.material.icons.filled.Search
@@ -34,6 +36,7 @@ import chat.ratatosk.desktop.ui.Strings
 import chat.ratatosk.desktop.ui.components.AddContactDialog
 import chat.ratatosk.desktop.ui.components.Avatar
 import chat.ratatosk.desktop.ui.components.CreateGroupDialog
+import chat.ratatosk.desktop.util.ClipboardUtils
 import chat.ratatosk.desktop.util.DateUtils
 import chat.ratatosk.desktop.util.MessagePreview
 import chat.ratatosk.desktop.util.toHexString
@@ -67,6 +70,9 @@ fun ChatListScreen(
     val unreadCounts by viewModel.unreadCounts.collectAsState()
     val allMessages by viewModel.messages.collectAsState()
     val activeChatId by viewModel.activeChatIdFlow.collectAsState()
+    val isFresh by viewModel.isCompanionFresh.collectAsState()
+    val endpoint by viewModel.companionEndpoint.collectAsState()
+    var showManual by remember { mutableStateOf(false) }
 
     val chats = remember(contacts, groups, allMessages, activeChatId, query) {
         buildChatList(contacts, groups, allMessages, activeChatId, query)
@@ -100,7 +106,9 @@ fun ChatListScreen(
                     )
                 }
                 TorStrip(viewModel)
-                if (isCompanionMode && !isCompanionLinked) CompanionStrip()
+                if (isCompanionMode && !isCompanionLinked) CompanionStrip(onClick = { showManual = true })
+                // Пока телефон не ответил, на экране — то, что лежит в кэше.
+                if (isCompanionMode && isCompanionLinked && !isFresh) StaleStrip()
             }
         },
         floatingActionButton = {
@@ -158,6 +166,8 @@ fun ChatListScreen(
             }
         }
     }
+
+    if (showManual) ManualLinkDialog(endpoint) { showManual = false }
 
     if (showCreateGroup) {
         val notices = viewModel.groupNotices
@@ -313,14 +323,68 @@ private fun TorStrip(viewModel: RatatoskViewModel) {
     }
 }
 
-/** У компаньона до связи с телефоном список неполон — сказать об этом. */
+/**
+ * У компаньона до связи с телефоном список неполон — сказать об этом.
+ * Щелчок показывает порт и ключ: телефону их вводят руками, когда mDNS молчит.
+ */
 @Composable
-private fun CompanionStrip() {
-    Surface(color = MaterialTheme.colorScheme.tertiaryContainer, modifier = Modifier.fillMaxWidth()) {
+private fun CompanionStrip(onClick: () -> Unit) {
+    Surface(
+        color = MaterialTheme.colorScheme.tertiaryContainer,
+        modifier = Modifier.fillMaxWidth().clickable(onClick = onClick),
+    ) {
         Row(Modifier.padding(horizontal = 16.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
             CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp, color = MaterialTheme.colorScheme.onTertiaryContainer)
             Spacer(Modifier.width(12.dp))
             Text(Strings.CHAT_COMPANION_LINKING, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onTertiaryContainer)
+        }
+    }
+}
+
+/** Связь есть, но показанное приехало из кэша, а не с телефона (`fresh == false`). */
+@Composable
+internal fun StaleStrip() {
+    Surface(color = MaterialTheme.colorScheme.secondaryContainer, modifier = Modifier.fillMaxWidth()) {
+        Row(Modifier.padding(horizontal = 16.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+            Icon(Icons.Default.History, null, tint = MaterialTheme.colorScheme.onSecondaryContainer, modifier = Modifier.size(16.dp))
+            Spacer(Modifier.width(8.dp))
+            Text(Strings.COMPANION_STALE, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSecondaryContainer)
+        }
+    }
+}
+
+/** Порт и ключ этого экрана — для ручного ввода на телефоне. */
+@Composable
+private fun ManualLinkDialog(endpoint: chat.ratatosk.desktop.backend.CompanionEndpoint?, onDismiss: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(Strings.COMPANION_MANUAL_TITLE) },
+        text = {
+            Column {
+                Text(Strings.COMPANION_MANUAL_DESC, style = MaterialTheme.typography.bodySmall)
+                Spacer(Modifier.height(12.dp))
+                if (endpoint == null) {
+                    Text(Strings.IDENTITY_NOT_AVAILABLE, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.outline)
+                } else {
+                    CopyableValue(Strings.COMPANION_MANUAL_PORT, endpoint.port.toString())
+                    Spacer(Modifier.height(8.dp))
+                    CopyableValue(Strings.COMPANION_MANUAL_KEY, endpoint.ikHex)
+                }
+                Spacer(Modifier.height(12.dp))
+                Text(Strings.COMPANION_MANUAL_HINT, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline)
+            }
+        },
+        confirmButton = { TextButton(onClick = onDismiss) { Text(Strings.CLOSE) } },
+    )
+}
+
+@Composable
+private fun CopyableValue(label: String, value: String) {
+    Text(label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.outline)
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Text(value, style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f))
+        IconButton(onClick = { ClipboardUtils.copyToClipboard(value) }) {
+            Icon(Icons.Default.ContentCopy, Strings.COPY, modifier = Modifier.size(18.dp))
         }
     }
 }

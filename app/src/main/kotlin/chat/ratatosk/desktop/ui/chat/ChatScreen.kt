@@ -34,6 +34,7 @@ import chat.ratatosk.desktop.model.ChatMessage
 import chat.ratatosk.desktop.model.buildChatMessages
 import chat.ratatosk.desktop.ui.RatatoskViewModel
 import chat.ratatosk.desktop.ui.Strings
+import chat.ratatosk.desktop.ui.chatlist.StaleStrip
 import chat.ratatosk.desktop.ui.components.Avatar
 import chat.ratatosk.desktop.ui.components.PickChatDialog
 import chat.ratatosk.desktop.util.ClipboardUtils
@@ -85,6 +86,7 @@ fun ChatScreen(
     val chatTheme by viewModel.chatTheme.collectAsState()
     val sendWithCtrlEnter by viewModel.sendWithCtrlEnter.collectAsState()
     val isCompanion by viewModel.isCompanionMode.collectAsState()
+    val isFresh by viewModel.isCompanionFresh.collectAsState()
     val companionLinked by viewModel.isCompanionLinked.collectAsState()
     val notices = viewModel.chatNotices
 
@@ -292,6 +294,7 @@ fun ChatScreen(
                     },
                 )
                 TransportStrip(viewModel, isCompanion, companionLinked)
+                if (isCompanion && companionLinked && !isFresh) StaleStrip()
             }
         },
         bottomBar = {

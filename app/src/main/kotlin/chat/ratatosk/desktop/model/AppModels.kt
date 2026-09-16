@@ -74,6 +74,9 @@ class AppModels(settings: SettingsRepository, scope: CoroutineScope) : SessionLi
             backend.events.collect { event -> dispatch(event) }
         }
         backend.start(session.scope)
+        // Порт и ключ известны сразу после открытия: телефону их вводят руками,
+        // когда mDNS молчит.
+        session._companionEndpoint.value = runCatching { backend.companionEndpoint() }.getOrNull()
 
         contacts.onSessionStarted()
         files.onSessionStarted()

@@ -424,4 +424,10 @@ object Strings {
     const val LINKING_COMPANION = "Подключение к телефону..."
     const val COMPANION_CACHE_DESC = "Сохранять копию переписки на этом компьютере для работы без телефона"
     const val INVALID_PAIRING_URI = "Некорректная ссылка сопряжения"
+    const val COMPANION_STALE = "Данные с прошлого подключения — телефон ещё не ответил"
+    const val COMPANION_MANUAL_TITLE = "Телефон не находит этот компьютер?"
+    const val COMPANION_MANUAL_DESC = "Обычно телефон находит второй экран сам. Если он в другой сети, за VPN или в гостевом Wi-Fi, введите на телефоне эти значения руками."
+    const val COMPANION_MANUAL_PORT = "Порт"
+    const val COMPANION_MANUAL_KEY = "Ключ этого экрана"
+    const val COMPANION_MANUAL_HINT = "Нажмите на полосу «Подключаемся», чтобы увидеть это снова."
 }

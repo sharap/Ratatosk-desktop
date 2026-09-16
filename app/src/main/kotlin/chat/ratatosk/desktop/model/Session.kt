@@ -12,6 +12,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import chat.ratatosk.desktop.backend.CompanionEndpoint
 import kotlinx.coroutines.flow.asStateFlow
 import org.ratatosk.core.RatatoskClient
 
@@ -23,6 +24,8 @@ interface SessionApi {
     val isCompanionMode: StateFlow<Boolean>
     val isCompanionLinked: StateFlow<Boolean>
     val isCompanionFresh: StateFlow<Boolean>
+    /** Порт и ключ этого второго экрана; `null` — полный клиент. */
+    val companionEndpoint: StateFlow<CompanionEndpoint?>
     fun clearError()
 }
 
@@ -54,6 +57,9 @@ class SessionContext(
 
     internal val _isCompanionFresh = MutableStateFlow(false)
     override val isCompanionFresh: StateFlow<Boolean> = _isCompanionFresh.asStateFlow()
+
+    internal val _companionEndpoint = MutableStateFlow<CompanionEndpoint?>(null)
+    override val companionEndpoint: StateFlow<CompanionEndpoint?> = _companionEndpoint.asStateFlow()
 
     /** Открытый аккаунт; `null` — ничего не открыто. */
     @Volatile
@@ -94,6 +100,7 @@ class SessionContext(
         _isCompanionMode.value = false
         _isCompanionLinked.value = false
         _isCompanionFresh.value = false
+        _companionEndpoint.value = null
         _activeAccountId.value = null
     }
 }

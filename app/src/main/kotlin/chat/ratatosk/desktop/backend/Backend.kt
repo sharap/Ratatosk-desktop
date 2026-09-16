@@ -16,9 +16,18 @@ import java.io.File
  * Все команды блокирующие (FFI) и бросают исключения — звать не на UI-потоке.
  * Результаты запросов и всё, что случилось с аккаунтом, приходят в [events].
  */
+/**
+ * Как телефону найти этот второй экран, если mDNS молчит (гостевой Wi-Fi,
+ * VPN): порт и ключ вводят на телефоне руками (`DESKTOP.md`, §13.4).
+ */
+class CompanionEndpoint(val port: Int, val ikHex: String)
+
 interface Backend {
     val events: SharedFlow<AppEvent>
     val isCompanion: Boolean
+
+    /** Порт и ключ для ручного ввода на телефоне; у полного клиента — `null`. */
+    fun companionEndpoint(): CompanionEndpoint? = null
 
     /** Начать переводить события ядра в [events]. Подписаться на [events] — до этого. */
     fun start(scope: CoroutineScope)
