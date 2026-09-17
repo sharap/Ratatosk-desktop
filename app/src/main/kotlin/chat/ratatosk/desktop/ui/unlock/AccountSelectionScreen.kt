@@ -35,6 +35,7 @@ fun AccountSelectionScreen(viewModel: RatatoskViewModel) {
     val scope = rememberCoroutineScope()
 
     var confirmDelete by remember { mutableStateOf<FfiAccount?>(null) }
+    var hiddenError by remember { mutableStateOf<String?>(null) }
 
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHostState) },
@@ -138,27 +139,38 @@ fun AccountSelectionScreen(viewModel: RatatoskViewModel) {
                     Spacer(modifier = Modifier.height(8.dp))
                     SecretTextField(
                         value = hiddenPin,
-                        onValueChange = { hiddenPin = it },
+                        onValueChange = { hiddenPin = it; hiddenError = null },
                         label = "PIN",
                         modifier = Modifier.fillMaxWidth(),
                         enabled = !isFindingHidden
                     )
+                    hiddenError?.let {
+                        Spacer(Modifier.height(8.dp))
+                        Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+                    }
+                    if (isFindingHidden) {
+                        Spacer(Modifier.height(8.dp))
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp)
+                            Spacer(Modifier.width(8.dp))
+                            Text(Strings.OPENING_SLOW_NOTE, style = MaterialTheme.typography.labelSmall)
+                        }
+                    }
                 }
             },
             confirmButton = {
                 Button(
                     onClick = {
+                        hiddenError = null
                         viewModel.findHiddenAccount(
                             pin = hiddenPin,
                             onFound = { id ->
                                 showHiddenDialog = false
-                                viewModel.selectAccount(FfiAccount(id, "Скрытый аккаунт", 0UL))
+                                // Тем же PIN и открываем: спрашивать его дважды незачем.
+                                viewModel.openHidden(id, hiddenPin)
                             },
-                            onNotFound = {
-                                scope.launch {
-                                    snackbarHostState.showSnackbar("Скрытый аккаунт не найден с таким PIN")
-                                }
-                            }
+                            // Ответ — там же, где вопрос: снэкбар под диалогом не виден.
+                            onNotFound = { hiddenError = Strings.HIDDEN_NOT_FOUND }
                         )
                     },
                     enabled = hiddenPin.isNotEmpty() && !isFindingHidden

@@ -1,6 +1,7 @@
 package chat.ratatosk.desktop.model
 
 import chat.ratatosk.desktop.backend.AppEvent
+import chat.ratatosk.desktop.ui.Strings
 import chat.ratatosk.desktop.util.AppDirs
 import chat.ratatosk.desktop.util.FileUtils
 import chat.ratatosk.desktop.util.Log
@@ -162,7 +163,7 @@ class FilesModel(session: SessionContext) : FeatureModel(session), FilesApi {
                 throw e
             } catch (e: Exception) {
                 Log.w(TAG, "Failed to save file", e)
-                session._error.value = "Failed to save file: ${e.message}"
+                session._error.value = e.message?.takeIf { it.isNotBlank() } ?: Strings.FILE_SAVE_FAILED
             } finally {
                 watcher?.cancel()
                 if (!saved) scope.launch { onFailure() }

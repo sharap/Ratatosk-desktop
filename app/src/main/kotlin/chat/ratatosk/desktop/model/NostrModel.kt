@@ -1,5 +1,6 @@
 package chat.ratatosk.desktop.model
 
+import chat.ratatosk.desktop.ui.Strings
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -104,7 +105,7 @@ class NostrModel(
             // Негодное ядро отбрасывает молча и оставляет прежний список —
             // сверяем, чтобы сказать об этом, а не показать старое как новое.
             if (client.nostrRelays() != clean) {
-                session._error.value = "Nostr: some relay addresses were not accepted by the core"
+                session._error.value = Strings.NOSTR_RELAYS_REJECTED
             }
             refresh()
         }

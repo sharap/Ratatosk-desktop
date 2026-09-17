@@ -1,6 +1,7 @@
 package chat.ratatosk.desktop.model
 
 import chat.ratatosk.desktop.backend.AppEvent
+import chat.ratatosk.desktop.ui.Strings
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -121,7 +122,7 @@ class TransportsModel(session: SessionContext) : FeatureModel(session), Transpor
     override fun createMailAccount(url: String, viaTor: Boolean) {
         session.clientIo("Failed to create mail account") { client ->
             if (viaTor && !client.transportEnabled(FfiTransport.ONION)) {
-                session._error.value = "Tor must be enabled to register via Tor"
+                session._error.value = Strings.MAIL_NEEDS_TOR
                 return@clientIo
             }
             client.createMailAccount(url.trim(), viaTor)
@@ -177,11 +178,11 @@ class TransportsModel(session: SessionContext) : FeatureModel(session), Transpor
                 }
             }
             is AppEvent.MailAccountFailed -> {
-                session._error.value = "Mail setup failed: ${event.reason}"
+                session._error.value = event.reason
                 refreshTransportStatus()
             }
             is AppEvent.MailLoginFailed -> {
-                session._error.value = "Mail login failed: ${event.reason}"
+                session._error.value = event.reason
                 refreshTransportStatus()
             }
             else -> {}

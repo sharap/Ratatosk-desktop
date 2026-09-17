@@ -5,6 +5,7 @@ import chat.ratatosk.desktop.backend.Backend
 import chat.ratatosk.desktop.backend.ClientBackend
 import chat.ratatosk.desktop.core.RatatoskCore
 import chat.ratatosk.desktop.data.SettingsRepository
+import chat.ratatosk.desktop.ui.Strings
 import chat.ratatosk.desktop.util.Log
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -69,10 +70,13 @@ class SessionContext(
     internal val client: RatatoskClient? get() = (backend as? ClientBackend)?.client
 
     /**
-     * Команда в фоне. Нет открытого аккаунта — ничего не делает. Ошибка
-     * пишется в журнал и, если задан [errorPrefix], показывается человеку.
+     * Команда в фоне. Нет открытого аккаунта — ничего не делает.
+     *
+     * [logLabel] — только для журнала. Человеку показываются **слова ядра**:
+     * они точнее нашей догадки о причине, а склеивать их с английским
+     * «Failed to…» значит показывать полфразы на чужом языке.
      */
-    internal fun io(errorPrefix: String? = null, block: suspend CoroutineScope.(Backend) -> Unit): Job =
+    internal fun io(logLabel: String? = null, block: suspend CoroutineScope.(Backend) -> Unit): Job =
         scope.launch(Dispatchers.IO) {
             val b = backend ?: return@launch
             try {
@@ -80,14 +84,14 @@ class SessionContext(
             } catch (e: kotlinx.coroutines.CancellationException) {
                 throw e
             } catch (e: Exception) {
-                Log.w("Session", errorPrefix ?: "Backend call failed", e)
-                if (errorPrefix != null) _error.value = "$errorPrefix: ${e.message}"
+                Log.w("Session", logLabel ?: "Backend call failed", e)
+                if (logLabel != null) _error.value = e.message?.takeIf { it.isNotBlank() } ?: Strings.CORE_CALL_FAILED
             }
         }
 
     /** То же для возможностей полного клиента; в режиме компаньона — ничего. */
-    internal fun clientIo(errorPrefix: String? = null, block: suspend CoroutineScope.(RatatoskClient) -> Unit): Job =
-        io(errorPrefix) { b -> (b as? ClientBackend)?.let { block(it.client) } }
+    internal fun clientIo(logLabel: String? = null, block: suspend CoroutineScope.(RatatoskClient) -> Unit): Job =
+        io(logLabel) { b -> (b as? ClientBackend)?.let { block(it.client) } }
 
     override fun clearError() {
         _error.value = null

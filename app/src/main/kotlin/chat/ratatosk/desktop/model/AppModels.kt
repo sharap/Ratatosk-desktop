@@ -8,6 +8,7 @@ import chat.ratatosk.desktop.core.RatatoskCore
 import chat.ratatosk.desktop.data.SettingsRepository
 import chat.ratatosk.desktop.util.AppDirs
 import chat.ratatosk.desktop.util.Log
+import chat.ratatosk.desktop.util.NetworkWatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
@@ -38,6 +39,7 @@ class AppModels(settings: SettingsRepository, scope: CoroutineScope) : SessionLi
     private val features: List<FeatureModel> = listOf(preferences, contacts, chats, navigation, files, transports, groups, yggdrasil, nostr, accounts, backup, pairing, notifications)
 
     private var eventsJob: Job? = null
+    private var networkJob: Job? = null
 
     init {
         // Копии вложений от прошлого запуска, если он завершился не выходом.
@@ -78,6 +80,10 @@ class AppModels(settings: SettingsRepository, scope: CoroutineScope) : SessionLi
         // когда mDNS молчит.
         session._companionEndpoint.value = runCatching { backend.companionEndpoint() }.getOrNull()
 
+        // Переезд в другую сеть ядро само не заметит: адреса сменились, а маяк
+        // и соединения привязаны к прежним.
+        networkJob = NetworkWatcher.start(session.scope) { transports.networkChanged() }
+
         contacts.onSessionStarted()
         files.onSessionStarted()
         transports.refreshTransportStatus()
@@ -107,6 +113,8 @@ class AppModels(settings: SettingsRepository, scope: CoroutineScope) : SessionLi
         // закрытием и очисткой, снова наполнит состояние прошлого аккаунта.
         eventsJob?.cancel()
         eventsJob = null
+        networkJob?.cancel()
+        networkJob = null
         session.backend?.close()
 
         features.forEach { it.reset() }

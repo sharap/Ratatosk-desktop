@@ -23,6 +23,7 @@ class SettingsRepository(
         val COMPANION_PAIRINGS = stringPreferencesKey("companion_pairings")
         val CORE_LOG_ENABLED = booleanPreferencesKey("core_log_enabled")
         val SEND_WITH_CTRL_ENTER = booleanPreferencesKey("send_with_ctrl_enter")
+        val LAST_ACCOUNT_ID = stringPreferencesKey("last_account_id")
     }
 
     val accountsMap: Flow<Map<String, String>> = dataStore.data.map { preferences ->
@@ -72,6 +73,13 @@ class SettingsRepository(
 
     /** `true` — отправка по Ctrl+Enter, Enter — новая строка; `false` — наоборот. */
     val sendWithCtrlEnter: Flow<Boolean> = dataStore.data.map { it[Keys.SEND_WITH_CTRL_ENTER] ?: false }
+
+    /** Какой аккаунт открывали в прошлый раз — его и предлагаем при запуске. */
+    val lastAccountId: Flow<String?> = dataStore.data.map { it[Keys.LAST_ACCOUNT_ID] }
+
+    suspend fun setLastAccountId(accountId: String) {
+        dataStore.edit { it[Keys.LAST_ACCOUNT_ID] = accountId }
+    }
 
     suspend fun setSendWithCtrlEnter(value: Boolean) {
         dataStore.edit { it[Keys.SEND_WITH_CTRL_ENTER] = value }
@@ -215,6 +223,18 @@ class SettingsRepository(
             }
         }
         return remaining
+    }
+
+    /**
+     * Прошлый раз этот аккаунт не открылся без PIN — значит спрашивать сразу.
+     * Это подсказка для скорости, а не секрет: врать она может только в сторону
+     * лишнего вопроса, и тогда попытка всё равно делается.
+     */
+    fun needsPinHint(accountId: String): Flow<Boolean> =
+        dataStore.data.map { it[booleanPreferencesKey(accountKey(accountId, "needs_pin"))] ?: false }
+
+    suspend fun setNeedsPinHint(accountId: String, needs: Boolean) {
+        dataStore.edit { it[booleanPreferencesKey(accountKey(accountId, "needs_pin"))] = needs }
     }
 
     /** Аккаунт открывается секретом устройства из [SecretStore]. */

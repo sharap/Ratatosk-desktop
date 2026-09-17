@@ -32,11 +32,21 @@ interface AccountsApi {
     val honestNotices: StateFlow<List<String>>
     val secretStoreAvailable: StateFlow<Boolean?>
     val isFindingHidden: StateFlow<Boolean>
+    /** Идёт открытие аккаунта: Argon2id считается заметные секунды. */
+    val isOpening: StateFlow<Boolean>
+    /**
+     * Тихая попытка открыть выбранный аккаунт не удалась — нужен PIN.
+     * Пока `false`, спрашивать нечего: у аккаунта без PIN или открываемого
+     * секретом устройства поле было бы вопросом о том, чего нет.
+     */
+    val pinRequired: StateFlow<Boolean>
     val accountExists: StateFlow<Boolean>
     fun refreshAccounts()
     fun findHiddenAccount(pin: String, onFound: (ByteArray) -> Unit, onNotFound: () -> Unit)
     fun initialize(label: String, pin: String?, displayName: String, bindToDevice: Boolean = false)
     fun unlock(account: FfiAccount, pin: String?)
+    /** Найденный скрытый аккаунт открывается тем же PIN — второй раз не спрашиваем. */
+    fun openHidden(id: ByteArray, pin: String)
     fun logout()
     fun selectAccount(account: FfiAccount?)
     fun setCreatingNewAccount(creating: Boolean)
@@ -111,6 +121,12 @@ class AccountsModel(
     private val _accountExists = MutableStateFlow(false)
     override val accountExists: StateFlow<Boolean> = _accountExists.asStateFlow()
 
+    private val _isOpening = MutableStateFlow(false)
+    override val isOpening: StateFlow<Boolean> = _isOpening.asStateFlow()
+
+    private val _pinRequired = MutableStateFlow(false)
+    override val pinRequired: StateFlow<Boolean> = _pinRequired.asStateFlow()
+
     init {
         // Хранилище секретов может спросить пароль связки ключей — не на UI-потоке.
         scope.launch(Dispatchers.IO) {
@@ -126,14 +142,18 @@ class AccountsModel(
                 chat.ratatosk.desktop.util.CoreLog.start(settings.coreLogEnabled.first())
                 RatatoskCore.initializeRegistry()
                 refreshAccounts()
+                // Тот, кого открывали в прошлый раз, — сразу: у аккаунта без PIN
+                // это открывает переписку, у остальных просит PIN на его экране.
+                val last = settings.lastAccountId.first()
+                _availableAccounts.value.find { it.id.toHexString() == last }?.let { selectAccount(it) }
             } catch (e: Exception) {
-                session._error.value = "Failed to open registry: ${e.message}"
+                session._error.value = Strings.REGISTRY_FAILED.format(e.message ?: "")
             }
         }
 
         RatatoskCore.safeCall { honestNotices() }
             .onSuccess { _honestNotices.value = it }
-            .onFailure { session._error.value = "Core unavailable: ${it.message}" }
+            .onFailure { session._error.value = Strings.CORE_UNAVAILABLE.format(it.message ?: "") }
     }
 
     override fun refreshAccounts() {
@@ -167,6 +187,7 @@ class AccountsModel(
      */
     override fun initialize(label: String, pin: String?, displayName: String, bindToDevice: Boolean) {
         scope.launch(Dispatchers.IO) {
+            _isOpening.value = true
             try {
                 val account = RatatoskCore.createAccount(label)
                 val idHex = account.id.toHexString()
@@ -183,6 +204,7 @@ class AccountsModel(
                 } else null
                 RatatoskCore.initialize(account.id, pin, deviceKey, displayName)
                 settings.registerAccount(idHex, displayName)
+                settings.setLastAccountId(idHex)
                 withContext(Dispatchers.Main) {
                     session._isInitialized.value = true
                     session._activeAccountId.value = idHex
@@ -191,13 +213,30 @@ class AccountsModel(
                     session._error.value = null
                 }
             } catch (e: Exception) {
-                session._error.value = "Failed to initialize: ${e.message}"
+                session._error.value = Strings.ACCOUNT_CREATE_FAILED.format(e.message ?: "")
+            } finally {
+                _isOpening.value = false
             }
         }
     }
 
-    override fun unlock(account: FfiAccount, pin: String?) {
+    override fun unlock(account: FfiAccount, pin: String?) = openAccount(account, pin, silent = false)
+
+    override fun openHidden(id: ByteArray, pin: String) {
+        val account = FfiAccount(id, Strings.HIDDEN_ACCOUNT, 0UL)
+        _selectedAccount.value = account
+        openAccount(account, pin, silent = false)
+    }
+
+    /**
+     * Открывает аккаунт.
+     *
+     * @param silent попытка «а вдруг PIN не нужен»: её неудача — не ошибка,
+     *   а ответ «спросить PIN», и говорить о ней человеку нечего.
+     */
+    private fun openAccount(account: FfiAccount, pin: String?, silent: Boolean) {
         scope.launch(Dispatchers.IO) {
+            _isOpening.value = true
             try {
                 val idHex = account.id.toHexString()
                 val savedName = settings.getDisplayName(idHex).firstOrNull() ?: account.label
@@ -208,14 +247,27 @@ class AccountsModel(
                         )
                 } else null
                 RatatoskCore.initialize(account.id, pin, deviceKey, savedName)
+                settings.setLastAccountId(idHex)
+                // Открылся без PIN — в следующий раз и спрашивать не будем.
+                settings.setNeedsPinHint(idHex, pin != null)
                 withContext(Dispatchers.Main) {
                     session._isInitialized.value = true
                     session._activeAccountId.value = idHex
+                    _pinRequired.value = false
                     lifecycle.startClientSession()
                     session._error.value = null
                 }
             } catch (e: Exception) {
-                session._error.value = "Failed to unlock: ${e.message}"
+                if (silent) {
+                    // Не подошло — значит PIN всё-таки есть. Это не ошибка.
+                    Log.d(TAG, "silent open needs a PIN")
+                    settings.setNeedsPinHint(account.id.toHexString(), true)
+                    withContext(Dispatchers.Main) { _pinRequired.value = true }
+                } else {
+                    session._error.value = e.message?.takeIf { it.isNotBlank() } ?: Strings.ACCOUNT_OPEN_FAILED
+                }
+            } finally {
+                _isOpening.value = false
             }
         }
     }
@@ -226,8 +278,19 @@ class AccountsModel(
 
     override fun selectAccount(account: FfiAccount?) {
         _selectedAccount.value = account
+        _pinRequired.value = false
         if (account == null) {
             _isCreatingNewAccount.value = false
+            return
+        }
+        // Спрашивать PIN у аккаунта, у которого его нет, — вопрос о том, чего
+        // нет. Пробуем открыть молча; поле появится, только если не вышло.
+        // Подсказка из настроек избавляет от бессмысленного счёта Argon2id
+        // там, где PIN уже спрашивали в прошлый раз.
+        session._error.value = null
+        scope.launch {
+            if (settings.needsPinHint(account.id.toHexString()).first()) _pinRequired.value = true
+            else openAccount(account, pin = null, silent = true)
         }
     }
 
@@ -244,7 +307,7 @@ class AccountsModel(
             val uri = pairing.legacyInviteUri
                 ?: SecretStore.system.get(SecretStore.PAIRING_PREFIX + pairing.deviceId)?.toString(Charsets.UTF_8)
             if (uri == null) {
-                session._error.value = "Pairing link is not available in the system secret store"
+                session._error.value = Strings.PAIRING_LINK_MISSING
                 return@launch
             }
             initializeCompanion(uri, pairing.useCache, pairing.deviceId, useTor = pairing.useTor)
@@ -310,7 +373,7 @@ class AccountsModel(
                     session._error.value = null
                 }
             } catch (e: Exception) {
-                session._error.value = "Failed to link companion: ${e.message}"
+                session._error.value = Strings.COMPANION_LINK_FAILED.format(e.message ?: "")
             }
         }
     }

@@ -19,7 +19,7 @@ import chat.ratatosk.desktop.ui.components.SecretTextField
 
 @Composable
 fun OnboardingScreen(viewModel: RatatoskViewModel) {
-    var label by remember { mutableStateOf("Основной") }
+    var label by remember { mutableStateOf("") }
     var displayName by remember { mutableStateOf("") }
     var pin by remember { mutableStateOf("") }
     val notices by viewModel.honestNotices.collectAsState()
@@ -33,11 +33,14 @@ fun OnboardingScreen(viewModel: RatatoskViewModel) {
     var bindToDevice by remember { mutableStateOf(false) }
     val secretStoreAvailable by viewModel.secretStoreAvailable.collectAsState()
 
+    val isOpening by viewModel.isOpening.collectAsState()
+    // Ярлык — местная подпись; не назвали, значит пусть совпадает с именем,
+    // а не с придуманным «Основной».
     val createIdentity = {
         viewModel.initialize(
-            label,
+            label.ifBlank { displayName.trim() },
             pin.takeIf { it.isNotEmpty() },
-            displayName.takeIf { it.isNotEmpty() } ?: "User",
+            displayName.trim(),
             bindToDevice = bindToDevice && secretStoreAvailable == true
         )
     }
@@ -51,12 +54,12 @@ fun OnboardingScreen(viewModel: RatatoskViewModel) {
         Spacer(modifier = Modifier.height(48.dp))
         
         Text(
-            text = "Welcome to Ratatosk",
+            text = Strings.CREATE_ACCOUNT_TITLE,
             style = MaterialTheme.typography.headlineMedium,
             fontWeight = FontWeight.Bold
         )
         Text(
-            text = "Secure, decentralized messenger",
+            text = Strings.CREATE_ACCOUNT_SUBTITLE,
             style = MaterialTheme.typography.bodyMedium
         )
 
@@ -82,7 +85,8 @@ fun OnboardingScreen(viewModel: RatatoskViewModel) {
         OutlinedTextField(
             value = label,
             onValueChange = { label = it },
-            label = { Text("Ярлык аккаунта (локально)") },
+            label = { Text(Strings.ACCOUNT_LABEL) },
+            placeholder = { Text(displayName) },
             modifier = Modifier.fillMaxWidth(0.8f)
         )
 
@@ -141,8 +145,13 @@ fun OnboardingScreen(viewModel: RatatoskViewModel) {
                 // законное сочетание, предупреждать не о чем.
                 onClick = { if (pin.isEmpty() && !(bindToDevice && secretStoreAvailable == true)) showNoPinWarning = true else createIdentity() },
                 modifier = Modifier.weight(1f),
-                enabled = displayName.isNotBlank() && label.isNotBlank()
+                // Ярлык не обязателен: пустой берётся из имени.
+                enabled = displayName.isNotBlank() && !isOpening
             ) {
+                if (isOpening) {
+                    CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp, color = MaterialTheme.colorScheme.onPrimary)
+                    Spacer(Modifier.width(8.dp))
+                }
                 Text(Strings.GENERATE_IDENTITY)
             }
         }
