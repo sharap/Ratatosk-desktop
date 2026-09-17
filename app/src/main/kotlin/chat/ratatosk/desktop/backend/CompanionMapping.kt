@@ -80,7 +80,9 @@ internal fun mapCompanionAttachment(att: FfiCompanionAttachment, mine: Boolean):
         receivedChunks = att.haveChunks,
         chunkTotal = att.chunkTotal,
         hasPreview = att.hasPreview,
-        chunkBytes = 0u
+        // Разбивка у каждого файла своя, и брать её надо из той же записи:
+        // без неё ядро не сходится с телефоном и приём не кончается никогда.
+        chunkBytes = att.chunkBytes.toUInt()
     )
 }
 

@@ -8,6 +8,7 @@ import chat.ratatosk.desktop.util.toHexString
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.BufferOverflow
@@ -40,6 +41,27 @@ class CompanionBackend(val companion: RatatoskCompanion) : Backend {
 
     /** Сохранения, ждущие `FileSaved` от ядра. */
     private val pendingSaves = ConcurrentHashMap<String, CompletableDeferred<Unit>>()
+
+    /**
+     * Ждёт конца выкладывания.
+     *
+     * Верим не только событию: файл под настоящим именем и нужного размера
+     * означает, что ядро уже закончило. Без этой проверки пропавшее
+     * `FileSaved` вешало ожидание навсегда — вложение доезжало до конца
+     * и не открывалось.
+     */
+    private suspend fun awaitSaved(done: CompletableDeferred<Unit>, file: FfiFile, destination: File) {
+        val expected = file.sizeBytes.toLong()
+        while (true) {
+            if (done.isCompleted) return done.await()
+            val onDisk = withContext(Dispatchers.IO) { if (destination.isFile) destination.length() else -1L }
+            if (expected > 0L && onDisk == expected) {
+                Log.d(TAG, "save finished by file size, without FileSaved")
+                return
+            }
+            delay(200)
+        }
+    }
 
     /** Какое вложение забираем сейчас: ядро берёт по одному за раз. */
     private fun pendingSaveId(): ByteArray? =
@@ -195,6 +217,9 @@ class CompanionBackend(val companion: RatatoskCompanion) : Backend {
     /**
      * Ядро пишет файл само (с `.part` до конца приёма) и сообщает `FileSaved`.
      * Сохранение у компаньона одно на всё окно: отмена — `cancelSave()`.
+     *
+     * `chunkTotal` и `chunkBytes` — из той же записи вложения, оба: своей
+     * разбивки у десктопа нет, а у каждого файла она своя.
      */
     override suspend fun saveFile(file: FfiFile, destination: File) {
         val key = file.fileId.toHexString()
@@ -208,9 +233,9 @@ class CompanionBackend(val companion: RatatoskCompanion) : Backend {
         try {
             withContext(Dispatchers.IO) {
                 destination.parentFile?.mkdirs()
-                companion.saveFile(file.fileId, file.chunkTotal, destination.absolutePath)
+                companion.saveFile(file.fileId, file.chunkTotal, file.chunkBytes.toULong(), destination.absolutePath)
             }
-            done.await()
+            awaitSaved(done, file, destination)
         } catch (e: CancellationException) {
             withContext(kotlinx.coroutines.NonCancellable + Dispatchers.IO) {
                 runCatching { companion.cancelSave() }

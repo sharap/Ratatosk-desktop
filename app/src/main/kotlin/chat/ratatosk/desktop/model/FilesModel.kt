@@ -190,11 +190,16 @@ class FilesModel(session: SessionContext) : FeatureModel(session), FilesApi {
         val total = file.sizeBytes.toLong()
         val part = File(destination.parentFile, destination.name + ".part")
         return launch(Dispatchers.IO) {
+            Log.d(TAG, "watching ${part.name} in ${part.parentFile?.name}")
             while (isActive) {
+                // Имя недописанного файла задаёт ядро: берём и «.part», и любой
+                // другой временный сосед с тем же началом имени.
                 val written = when {
-                    part.exists() -> part.length()
-                    destination.exists() -> destination.length()
-                    else -> 0L
+                    destination.isFile -> destination.length()
+                    part.isFile -> part.length()
+                    else -> destination.parentFile
+                        ?.listFiles { f -> f.name.startsWith(destination.name) && f != destination }
+                        ?.maxOfOrNull { it.length() } ?: 0L
                 }
                 if (total > 0) {
                     _saveProgress.update { it + (hex to (written.toFloat() / total).coerceIn(0f, 1f)) }
