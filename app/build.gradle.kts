@@ -61,6 +61,32 @@ val buildRustCoreWindows = tasks.register<Exec>("buildRustCoreWindows") {
 }
 val includeWindows = providers.gradleProperty("ratatosk.windows").map { it.toBoolean() }.getOrElse(false)
 
+// Linux arm64 (PinePhone с Mobian, одноплатники). Как и Windows — не по
+// умолчанию: нужен линкер `aarch64-linux-gnu-gcc` и цель Rust
+// `aarch64-unknown-linux-gnu`. Подключается к ресурсам с -Pratatosk.arm64=true.
+//
+// Сам `.deb` под arm64 так не получить: `jpackage` кладёт в пакет ту JVM,
+// под которой работает, и собирать его надо на arm64. Зато с этой библиотекой
+// (и графикой arm64, см. ниже) собирается один jar, который запускается
+// системной JVM и там, и здесь.
+val uniffiArm64Dir = layout.buildDirectory.dir("generated/uniffi-linux-arm64")
+val buildRustCoreArm64 = tasks.register<Exec>("buildRustCoreArm64") {
+    description = "Кросс-сборка ratatosk-ffi под Linux arm64 (glibc)."
+    configureCoreBuild(uniffiArm64Dir, target = "aarch64-unknown-linux-gnu")
+    doFirst {
+        // Иначе падает `cc-rs` на середине сборки `ring`, и по сообщению
+        // непонятно, что делать. Говорим прямо и заранее.
+        val linker = System.getenv("PATH").orEmpty().split(File.pathSeparator)
+            .any { File(it, "aarch64-linux-gnu-gcc").canExecute() }
+        require(linker) {
+            "Нет линкера aarch64-linux-gnu-gcc. Установите его " +
+                "(Debian/Ubuntu: sudo apt install gcc-aarch64-linux-gnu) и цель Rust: " +
+                "rustup target add aarch64-unknown-linux-gnu"
+        }
+    }
+}
+val includeArm64 = providers.gradleProperty("ratatosk.arm64").map { it.toBoolean() }.getOrElse(false)
+
 kotlin.sourceSets.named("main") {
     kotlin.srcDir(files(uniffiDir.map { it.dir("kotlin") }).builtBy(buildRustCore))
 }
@@ -69,10 +95,18 @@ sourceSets.named("main") {
     if (includeWindows) {
         resources.srcDir(files(uniffiWindowsDir.map { it.dir("resources") }).builtBy(buildRustCoreWindows))
     }
+    if (includeArm64) {
+        resources.srcDir(files(uniffiArm64Dir.map { it.dir("resources") }).builtBy(buildRustCoreArm64))
+    }
 }
 
 dependencies {
     implementation(compose.desktop.currentOs)
+    // Графика Skia под arm64 — только когда её просят: это ещё десятки мегабайт
+    // в сборке, а хозяйской машине она не нужна.
+    if (includeArm64) {
+        implementation("org.jetbrains.skiko:skiko-awt-runtime-linux-arm64:0.150.1")
+    }
     implementation(libs.compose.ui)
     implementation(libs.compose.foundation)
     implementation(libs.compose.material3)
