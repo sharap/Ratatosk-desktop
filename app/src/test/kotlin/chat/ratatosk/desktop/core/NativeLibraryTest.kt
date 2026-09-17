@@ -18,6 +18,18 @@ class NativeLibraryTest {
     }
 
     @Test
+    fun libraryLiesWhereJnaLooksForIt() {
+        // `DESKTOP.md` просит сверять это на каждой платформе: библиотека
+        // кладётся в каталог с префиксом JNA, и разойдись они — дистрибутив
+        // соберётся, а приложение не запустится.
+        val prefix = com.sun.jna.Platform.RESOURCE_PREFIX
+        val onClasspath = javaClass.getResource("/$prefix/libratatosk_ffi.so")
+            ?: javaClass.getResource("/$prefix/ratatosk_ffi.dll")
+            ?: javaClass.getResource("/$prefix/libratatosk_ffi.dylib")
+        assertTrue("нет библиотеки в ресурсах для префикса $prefix", onClasspath != null)
+    }
+
+    @Test
     fun yggAddressIsDerivedByCore() {
         val address = org.ratatosk.core.yggAddress(ByteArray(32) { 0x11 })
         println("ygg address for 0x11…: $address")

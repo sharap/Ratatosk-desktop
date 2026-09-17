@@ -114,6 +114,32 @@ compose.desktop {
             modules("java.instrument", "jdk.unsupported")
             packageName = "Ratatosk"
             packageVersion = "1.0.0"
+            description = "Ratatosk — переписка без серверов"
+            vendor = "Ratatosk"
+
+            linux {
+                // Без него `packageDeb` подставляет адрес сборочной машины.
+                debMaintainer = "noreply@ratatosk.chat"
+                appCategory = "Network"
+                shortcut = true
+                iconFile.set(project.file("src/main/resources/icon.png"))
+            }
+
+            windows {
+                // Один и тот же UUID на все выпуски: по нему установщик
+                // понимает, что это обновление, а не второе приложение.
+                // Меняется только если это уже другое приложение.
+                upgradeUuid = "2f4c9c1e-8f1a-4f2a-9b3e-5a7c6d0e1b42"
+                menuGroup = "Ratatosk"
+                menu = true
+                shortcut = true
+                iconFile.set(project.file("src/main/resources/icon.ico"))
+            }
+
+            macOS {
+                bundleID = "chat.ratatosk.desktop"
+                iconFile.set(project.file("src/main/resources/icon.png"))
+            }
         }
     }
 }

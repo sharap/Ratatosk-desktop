@@ -732,6 +732,27 @@ npub с копированием, `nostr_direct` с `getNostrDirectWarning()`, �
 
 ## Этап 9. Тесты и проверка
 
+> **Сделано (17.09.2026).**
+> * Перенесены тесты разметки (`MarkdownPlainTextTest`) и полный набор случаев
+>   уведомления о реакции; тесты `safeName`, сохранённых сопряжений
+>   (`CompanionPairingsTest`), `MessagePreview` и форм числа — на месте.
+> * `logoutLeavesNothingOfThePreviousAccount` — выход не оставляет переписки, лиц,
+>   состава групп, счётчиков, превью и открытого просмотрщика.
+> * `LoggingPolicyTest` — правило, а не поведение: печать только через журнал
+>   (`println`/`printStackTrace` вне `Log.kt` запрещены) и событие в журнал попадает
+>   только именем класса. Соблазн написать `println(event)` при отладке возвращается,
+>   а в ревью это незаметно.
+> * `libraryLiesWhereJnaLooksForIt` — библиотека лежит в каталоге префикса JNA
+>   (на этой машине `linux-x86-64`), как просит `DESKTOP.md`.
+> * Всего 69 тестов, один пропускается без `-Pratatosk.test.keyring=true`.
+> * `packageDeb` собирает пакет; распакованный `opt/ratatosk/bin/Ratatosk` запускается
+>   без `jna.library.path`. Заведены настройки дистрибутивов: `debMaintainer`,
+>   категория, ярлыки, значки (`icon.png` и `icon.ico` из `icon.webp`), `upgradeUuid`
+>   для Windows, `bundleID` для macOS.
+> * `.msi` на Linux **не собрать**: задача молча пропускается — нужен Windows или CI
+>   с windows-раннером. Конфигурация для него готова.
+> * Чек-лист ручной проверки — `CHECKLIST-manual-2026-09-17.md`.
+
 * Перенести `MarkdownUtilsTest.kt`, `ReactionNoticeTest.kt`; добавить тесты на `safeName`,
   разбор сохранённых ссылок компаньона, `MessagePreview`, логику очистки при `logout`.
 * Тест, что никакой `toString()` события не попадает в лог в release.

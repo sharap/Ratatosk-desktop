@@ -21,6 +21,27 @@ class PreviewAndReactionsTest {
     )
 
     @Test
+    fun reactionIsAnnouncedOnlyForMyMessageAndForeignAuthor() {
+        // Полный набор случаев из android-версии: один и тот же помощник
+        // в двух приложениях обязан решать одинаково.
+        val other = byteArrayOf(2, 2, 2)
+        val third = byteArrayOf(3, 3, 3)
+        val thumbs = FfiReaction("👍", other, false)
+
+        assertEquals("👍", reactionToAnnounce(message(mine = true, reactions = listOf(thumbs)), other)?.emoji)
+        // Реакцию сняли — сообщать нечего.
+        assertNull(reactionToAnnounce(message(mine = true), other))
+        // На чужое сообщение — не наше дело.
+        assertNull(reactionToAnnounce(message(mine = false, reactions = listOf(thumbs)), other))
+        // Своя реакция на своё сообщение.
+        assertNull(reactionToAnnounce(message(mine = true, reactions = listOf(FfiReaction("👍", other, true))), other))
+
+        val both = message(mine = true, reactions = listOf(thumbs, FfiReaction("🔥", third, false)))
+        assertEquals("👍", reactionToAnnounce(both, other)?.emoji)
+        assertEquals("🔥", reactionToAnnounce(both, third)?.emoji)
+    }
+
+    @Test
     fun attachmentCountReadsNaturallyInAnyLanguage() {
         // Формы числа зависят от языка, поэтому проверяем не буквы, а смысл:
         // число на месте, а «одно» и «много» звучат по-разному.

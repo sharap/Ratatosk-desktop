@@ -154,6 +154,51 @@ class ModelsWithFakeBackendTest {
     }
 
     @Test
+    fun logoutLeavesNothingOfThePreviousAccount() {
+        // Выход должен забирать с собой всё: переписка, лица, состав групп
+        // и счётчики — это данные человека, который уже ушёл. Раньше часть
+        // оставалась в памяти и всплывала у следующего аккаунта (ревью 3).
+        val chats = ChatsModel(session)
+        val contacts = ContactsModel(session)
+        val groups = GroupsModel(session)
+        val files = FilesModel(session)
+        val navigation = NavigationModel(session, onVisibleChat = {})
+
+        val event = AppEvent.ChatsLoaded(
+            listOf(contact(chatA, ikA)),
+            listOf(group(chatB, joined = true, canManage = true)),
+            fresh = true,
+        )
+        listOf(chats, contacts, groups).forEach { it.onEvent(event) }
+        chats.onEvent(AppEvent.HistoryLoaded(chatA, listOf(message(msg1)), fresh = true))
+        chats.onEvent(AppEvent.MessageArrived(chatB, msg1))
+        contacts.onEvent(AppEvent.AvatarLoaded(chatA, byteArrayOf(1)))
+        contacts.onEvent(AppEvent.AvatarLoaded(null, byteArrayOf(2)))
+        groups.onEvent(AppEvent.MembersLoaded(chatB, listOf(GroupMember(chatA, "Я", isMe = true, isOwner = true))))
+        files.onEvent(AppEvent.FileProgress(msg1, 0.5f))
+        files.onEvent(AppEvent.SaveProgress(msg1, 0.5f))
+        files.onEvent(AppEvent.PreviewLoaded(msg1, byteArrayOf(7)))
+        navigation.openChat(chatA)
+
+        // Ровно то, что делает выход из аккаунта.
+        listOf(chats, contacts, groups, files, navigation).forEach { it.reset() }
+
+        assertTrue(chats.messages.value.isEmpty())
+        assertTrue(chats.unreadCounts.value.isEmpty())
+        assertNull(chats.activeChatIdFlow.value)
+        assertTrue(contacts.contacts.value.isEmpty())
+        assertTrue(contacts.contactAvatars.value.isEmpty())
+        assertNull(contacts.myAvatar.value)
+        assertTrue(groups.groups.value.isEmpty())
+        assertTrue(groups.groupMembers.value.isEmpty())
+        assertTrue(files.fileProgress.value.isEmpty())
+        assertTrue(files.saveProgress.value.isEmpty())
+        assertTrue(files.filePreviews.value.isEmpty())
+        assertNull(files.viewerMedia.value)
+        assertNull(navigation.navState.value.top)
+    }
+
+    @Test
     fun clientOnlyFeaturesAreQuietInCompanionMode() {
         val contacts = ContactsModel(session)
         contacts.markVerified(ikA)
