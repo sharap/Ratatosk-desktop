@@ -7,6 +7,7 @@ import org.ratatosk.core.FfiCompanionChat
 import org.ratatosk.core.FfiCompanionMessage
 import org.ratatosk.core.FfiContact
 import org.ratatosk.core.FfiFile
+import org.ratatosk.core.FfiSharedContact
 import org.ratatosk.core.FfiMessage
 import org.ratatosk.core.FfiReachability
 import org.ratatosk.core.FfiReaction
@@ -62,7 +63,17 @@ internal fun mapCompanionMessage(msg: FfiCompanionMessage): FfiMessage {
         reactions = msg.reactions.map { FfiReaction(it.emoji, ByteArray(0), it.mine) },
         files = msg.files.map { mapCompanionAttachment(it, msg.mine) },
         replyTo = msg.replyTo,
-        sharedContact = null,
+        // Ключа в карточке у компаньона нет: `IK` границу устройства не пересекает.
+        // На месте ключа — известный `chatId`, по нему и открывается переписка.
+        sharedContact = msg.shared?.let { shared ->
+            FfiSharedContact(
+                peerIk = shared.chatId ?: ByteArray(0),
+                displayName = shared.name,
+                fingerprint = "",
+                alreadyKnown = shared.chatId != null,
+                mine = msg.mine,
+            )
+        },
         // Сопоставление подписи автора с участником группы — этап 3.
         author = msg.author,
         authorIk = null

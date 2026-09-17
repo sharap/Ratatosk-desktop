@@ -10,6 +10,8 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AccountCircle
+import androidx.compose.material.icons.filled.PersonAdd
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.automirrored.filled.Reply
 import androidx.compose.material.icons.automirrored.filled.Undo
@@ -35,6 +37,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.dp
 import chat.ratatosk.desktop.model.ChatMessage
+import chat.ratatosk.desktop.model.SharedCard
 import chat.ratatosk.desktop.ui.Strings
 import chat.ratatosk.desktop.ui.components.Avatar
 import chat.ratatosk.desktop.util.MarkdownUtils
@@ -77,6 +80,7 @@ fun MessageRow(
     onReplyClick: (() -> Unit)?,
     waitingNotice: String,
     actions: MessageActions,
+    sharedActions: SharedCardActions,
     attachments: @Composable (contentColor: Color, accent: Color) -> Unit,
 ) {
     val raw = message.raw
@@ -155,6 +159,9 @@ fun MessageRow(
                             Text(Strings.FORWARDED, style = MaterialTheme.typography.labelSmall, color = contentColor.copy(alpha = 0.7f))
                         }
                         attachments(contentColor, accent)
+                        message.shared?.let { card ->
+                            SharedContactCard(card, contentColor, accent, sharedActions)
+                        }
                         if (raw.body.isNotBlank()) {
                             MessageText(raw.body, contentColor, accent, expanded, onToggleExpanded, revealedSpoilers, onRevealSpoiler)
                         }
@@ -391,4 +398,65 @@ private fun statusIcon(status: FfiDeliveryStatus) = when (status) {
     FfiDeliveryStatus.DELIVERED -> Icons.Default.DoneAll to Strings.STATUS_DELIVERED
     FfiDeliveryStatus.READ -> Icons.Default.DoneAll to Strings.STATUS_READ
     FfiDeliveryStatus.UNDELIVERABLE -> Icons.Default.ErrorOutline to Strings.STATUS_UNDELIVERABLE
+}
+
+/** Что можно сделать с присланной карточкой человека. */
+class SharedCardActions(
+    val onAdd: () -> Unit,
+    val onOpenChat: (ByteArray) -> Unit,
+)
+
+/**
+ * Присланная карточка человека.
+ *
+ * «Добавить» не обещает сверки: она делается голосом при встрече, а не
+ * нажатием в окне (§4.2), — и об этом сказано прямо под кнопкой.
+ */
+@Composable
+private fun SharedContactCard(card: SharedCard, contentColor: Color, accent: Color, actions: SharedCardActions) {
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .padding(vertical = 4.dp)
+            .clip(RoundedCornerShape(8.dp))
+            .background(MaterialTheme.colorScheme.surface)
+            .padding(8.dp)
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(Icons.Default.AccountCircle, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(40.dp))
+            Spacer(Modifier.width(8.dp))
+            Column(Modifier.weight(1f)) {
+                Text(card.name, style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onSurface)
+                // Отпечатка у компаньона нет вовсе — тогда и строки нет.
+                card.fingerprint?.let {
+                    Text(it, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+        }
+        Spacer(Modifier.height(8.dp))
+        val chatId = card.chatId
+        when {
+            card.mine -> Text(
+                Strings.SHARED_CARD_YOU,
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            chatId != null -> OutlinedButton(onClick = { actions.onOpenChat(chatId) }, modifier = Modifier.fillMaxWidth()) {
+                Text(Strings.SHARED_CARD_KNOWN)
+            }
+            else -> {
+                Button(onClick = actions.onAdd, modifier = Modifier.fillMaxWidth()) {
+                    Icon(Icons.Default.PersonAdd, null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Text(Strings.SHARED_CARD_ADD)
+                }
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    Strings.SHARED_CARD_UNVERIFIED,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+    }
 }

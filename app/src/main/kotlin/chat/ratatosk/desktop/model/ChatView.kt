@@ -16,6 +16,20 @@ class MessageAuthor(
     val chatId: ByteArray?,
 )
 
+/**
+ * Присланная кем-то карточка человека (§4.1).
+ *
+ * @param fingerprint `null` — отпечатка здесь нет: у компаньона ключ границу
+ *   устройства не пересекает, и сверять нечего.
+ * @param chatId известная переписка с этим человеком; `null` — его нет в контактах.
+ */
+class SharedCard(
+    val name: String,
+    val fingerprint: String?,
+    val chatId: ByteArray?,
+    val mine: Boolean,
+)
+
 /** Реакции одним смайликом: сколько и есть ли среди них моя. */
 class ReactionChip(val emoji: String, val count: Int, val mine: Boolean)
 
@@ -28,6 +42,8 @@ class ChatMessage(
     val status: FfiDeliveryStatus?,
     val author: MessageAuthor?,
     val reactions: List<ReactionChip>,
+    /** Карточка человека в сообщении; `null` — её там нет. */
+    val shared: SharedCard?,
     /** Предыдущее (более старое) сообщение от другого автора — показать имя и лицо. */
     val startsRun: Boolean,
 ) {
@@ -63,6 +79,16 @@ fun buildChatMessages(
             author = author,
             reactions = msg.reactions.groupBy { it.emoji }.map { (emoji, list) ->
                 ReactionChip(emoji, list.size, list.any { it.mine })
+            },
+            shared = msg.sharedContact?.let { card ->
+                SharedCard(
+                    name = card.displayName,
+                    fingerprint = card.fingerprint.takeIf { it.isNotBlank() },
+                    // Чат человека — первые 16 байт `IK`; у компаньона там
+                    // уже сам `chatId`, и обрезка ничего не меняет.
+                    chatId = card.peerIk.takeIf { card.alreadyKnown && it.size >= 16 }?.copyOf(16),
+                    mine = card.mine,
+                )
             },
             startsRun = startsRun,
         )

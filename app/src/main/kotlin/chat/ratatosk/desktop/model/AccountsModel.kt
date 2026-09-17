@@ -18,6 +18,7 @@ import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import chat.ratatosk.desktop.ui.Strings
 import org.ratatosk.core.FfiAccount
 import org.ratatosk.core.honestNotices
 import java.io.File
@@ -52,6 +53,14 @@ interface AccountsApi {
         useTor: Boolean = false,
     )
     fun removeCompanionPairing(deviceId: String)
+    /** Хранится ли снимок переписки этого второго экрана на диске. */
+    val companionCacheEnabled: StateFlow<Boolean>
+    /**
+     * Включить или выключить снимок переписки. Выключение стирает файл
+     * средствами ядра; включить можно только когда ссылка сопряжения лежит
+     * в хранилище ОС — без неё снимок было бы нечем открыть в другой раз.
+     */
+    fun setCompanionCache(enabled: Boolean)
 }
 
 /** Что происходит с сессией после того, как аккаунт открыт или закрыт. */
@@ -307,6 +316,43 @@ class AccountsModel(
             .digest(uri.toByteArray())
             .toHexString()
             .take(16)
+
+    override val companionCacheEnabled = combine(companionPairings, session.activeAccountId) { pairings, id ->
+        id != null && pairings.any { it.deviceId == id && it.useCache }
+    }.stateIn(scope, SharingStarted.Eagerly, false)
+
+    override fun setCompanionCache(enabled: Boolean) {
+        val deviceId = session.activeAccountId.value ?: return
+        val backend = session.backend ?: return
+        scope.launch(Dispatchers.IO) {
+            try {
+                if (!enabled) {
+                    // Стирает файл само ядро: путь `null` — «не класть никуда».
+                    backend.setCachePath(null)
+                    val known = settings.companionPairings.first().find { it.deviceId == deviceId }
+                    if (known != null) settings.saveCompanionPairing(known.copy(useCache = false))
+                    return@launch
+                }
+                val store = SecretStore.system
+                val hasLink = store.isAvailable && store.get(SecretStore.PAIRING_PREFIX + deviceId) != null
+                if (!hasLink) {
+                    // Снимок без ссылки — файл, который нечем открыть.
+                    session._error.value = Strings.COMPANION_CACHE_NEEDS_LINK
+                    return@launch
+                }
+                val dir = File(AppDirs.getBaseDir(), "companions").apply { mkdirs() }
+                backend.setCachePath(File(dir, "$deviceId.db").absolutePath)
+                val known = settings.companionPairings.first().find { it.deviceId == deviceId }
+                val phoneName = known?.phoneName ?: ""
+                settings.saveCompanionPairing(
+                    (known ?: SettingsRepository.CompanionPairing(deviceId, phoneName, true)).copy(useCache = true)
+                )
+            } catch (e: Exception) {
+                Log.w(TAG, "Failed to switch companion cache", e)
+                session._error.value = Strings.COMPANION_CACHE_FAILED
+            }
+        }
+    }
 
     override fun removeCompanionPairing(deviceId: String) {
         scope.launch(Dispatchers.IO) {

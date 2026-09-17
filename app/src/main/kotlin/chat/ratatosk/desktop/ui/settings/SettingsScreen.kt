@@ -132,6 +132,12 @@ fun SettingsScreen(
                         HorizontalDivider()
                         Spacer(modifier = Modifier.height(24.dp))
                         MessagesSection(viewModel)
+                        if (isCompanionMode) {
+                            Spacer(modifier = Modifier.height(24.dp))
+                            HorizontalDivider()
+                            Spacer(modifier = Modifier.height(24.dp))
+                            CompanionSection(viewModel)
+                        }
                     }
 
                     Column(
@@ -206,6 +212,10 @@ fun SettingsScreen(
                     )
                     HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
                     MessagesSection(viewModel)
+                    if (isCompanionMode) {
+                        HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
+                        CompanionSection(viewModel)
+                    }
                     HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
                     StorageSection(
                         viewModel = viewModel,
@@ -384,6 +394,53 @@ fun TransportsSection(
                     }
                 }
             }
+        )
+    }
+}
+
+/**
+ * Второй экран: хранить ли копию переписки. Перед включением — слова о том,
+ * от чего это шифрование **не** защищает (`DESKTOP.md`, §13.4).
+ */
+@Composable
+fun CompanionSection(viewModel: RatatoskViewModel) {
+    val cacheEnabled by viewModel.companionCacheEnabled.collectAsState()
+    var confirmOn by remember { mutableStateOf(false) }
+
+    Column {
+        Text(text = Strings.COMPANION_SECTION, style = MaterialTheme.typography.titleMedium)
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(Modifier.weight(1f)) {
+                Text(Strings.COMPANION_CACHE)
+                Text(
+                    if (cacheEnabled) Strings.COMPANION_CACHE_ON_DESC else Strings.COMPANION_CACHE_OFF_DESC,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            Switch(
+                checked = cacheEnabled,
+                onCheckedChange = { on -> if (on) confirmOn = true else viewModel.setCompanionCache(false) }
+            )
+        }
+    }
+
+    if (confirmOn) {
+        AlertDialog(
+            onDismissRequest = { confirmOn = false },
+            title = { Text(Strings.COMPANION_CACHE_ON_TITLE) },
+            text = { Text(Strings.COMPANION_CACHE_ON_DESC) },
+            confirmButton = {
+                TextButton(onClick = {
+                    viewModel.setCompanionCache(true)
+                    confirmOn = false
+                }) { Text(Strings.ENABLE) }
+            },
+            dismissButton = { TextButton(onClick = { confirmOn = false }) { Text(Strings.CANCEL) } }
         )
     }
 }

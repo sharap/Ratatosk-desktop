@@ -387,6 +387,12 @@ fun ChatScreen(
                                     ({ viewModel.resendMessage(chatId, message.raw) }) else null,
                             ),
                             onAuthorClick = message.author?.chatId?.let { authorChat -> { viewModel.openContact(authorChat, fromChat = true) } },
+                            sharedActions = SharedCardActions(
+                                // Добавляется не «человек», а карточка из этого
+                                // сообщения: ключ берёт ядро, а не экран.
+                                onAdd = { viewModel.addSharedContact(message.msgId) },
+                                onOpenChat = { target -> viewModel.openChat(target) },
+                            ),
                         )
                     }
                     item(key = "history-start") {
@@ -469,6 +475,7 @@ private fun MessageItem(
     onJump: (ByteArray) -> Unit,
     onSaved: (String) -> Unit,
     actions: MessageActions,
+    sharedActions: SharedCardActions,
     onAuthorClick: (() -> Unit)?,
 ) {
     val replyId = message.raw.replyTo
@@ -490,6 +497,7 @@ private fun MessageItem(
         onReplyClick = replyId?.let { id -> { onJump(id) } },
         waitingNotice = waitingNotice,
         actions = actions,
+        sharedActions = sharedActions,
         attachments = { _, _ ->
             AttachmentList(message.raw.files, chatId, viewModel, onSaved)
         },

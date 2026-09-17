@@ -29,6 +29,12 @@ interface Backend {
     /** Порт и ключ для ручного ввода на телефоне; у полного клиента — `null`. */
     fun companionEndpoint(): CompanionEndpoint? = null
 
+    /**
+     * Куда класть снимок переписки; `null` — не класть и стереть уже
+     * лежащее. Только у второго экрана — у полного клиента своя база.
+     */
+    fun setCachePath(path: String?) {}
+
     /** Начать переводить события ядра в [events]. Подписаться на [events] — до этого. */
     fun start(scope: CoroutineScope)
 
