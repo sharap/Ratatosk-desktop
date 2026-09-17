@@ -53,6 +53,11 @@ interface AccountsApi {
         useTor: Boolean = false,
     )
     fun removeCompanionPairing(deviceId: String)
+    /**
+     * Стирает аккаунт: файлы — ядром, свои записи и секрет устройства — сами.
+     * Открытый аккаунт стереть нельзя: это проверяет ядро.
+     */
+    fun wipeAccount(account: FfiAccount)
     /** Хранится ли снимок переписки этого второго экрана на диске. */
     val companionCacheEnabled: StateFlow<Boolean>
     /**
@@ -350,6 +355,26 @@ class AccountsModel(
             } catch (e: Exception) {
                 Log.w(TAG, "Failed to switch companion cache", e)
                 session._error.value = Strings.COMPANION_CACHE_FAILED
+            }
+        }
+    }
+
+    override fun wipeAccount(account: FfiAccount) {
+        val idHex = account.id.toHexString()
+        scope.launch(Dispatchers.IO) {
+            try {
+                RatatoskCore.wipeAccount(account.id)
+                // Секрет устройства без аккаунта — мусор в связке ключей.
+                SecretStore.system.delete(SecretStore.DEVICE_KEY_PREFIX + idHex)
+                settings.forgetAccount(idHex)
+                withContext(Dispatchers.Main) {
+                    if (_selectedAccount.value?.id?.contentEquals(account.id) == true) _selectedAccount.value = null
+                    session._error.value = null
+                }
+                refreshAccounts()
+            } catch (e: Exception) {
+                Log.w(TAG, "Failed to wipe account", e)
+                session._error.value = Strings.ACCOUNT_DELETE_FAILED
             }
         }
     }

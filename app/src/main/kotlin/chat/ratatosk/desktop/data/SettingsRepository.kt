@@ -49,6 +49,17 @@ class SettingsRepository(
         }
     }
 
+    /** Забыть аккаунт: запись в списке и все его настройки. */
+    suspend fun forgetAccount(accountId: String) {
+        dataStore.edit { preferences ->
+            val accounts = (preferences[Keys.ACCOUNTS_MAP] ?: "").split(";")
+                .filter { it.isNotBlank() && !it.startsWith("$accountId:") }
+            preferences[Keys.ACCOUNTS_MAP] = accounts.joinToString(";")
+            val prefix = "${accountId}_"
+            preferences.asMap().keys.filter { it.name.startsWith(prefix) }.forEach { preferences.remove(it) }
+        }
+    }
+
     private fun accountKey(accountId: String, key: String) = "${accountId}_$key"
 
     fun getDisplayName(accountId: String): Flow<String?> = dataStore.data.map { it[stringPreferencesKey(accountKey(accountId, "display_name"))] }

@@ -23,6 +23,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import chat.ratatosk.desktop.ui.RatatoskViewModel
 import chat.ratatosk.desktop.ui.Strings
+import chat.ratatosk.desktop.ui.chat.formatFileSize
 import chat.ratatosk.desktop.ui.components.SecretTextField
 import chat.ratatosk.desktop.util.FilePicker
 import chat.ratatosk.desktop.util.FileUtils
@@ -31,7 +32,9 @@ import org.ratatosk.core.FfiMailState
 import org.ratatosk.core.FfiMailStatus
 import org.ratatosk.core.FfiTorStatus
 import org.ratatosk.core.lanWarning
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -250,7 +253,8 @@ fun SettingsScreen(
         AlertDialog(
             onDismissRequest = { showLanWarning = false },
             title = { Text(Strings.LAN_VISIBILITY) },
-            text = { Text(lanWarning()) },
+            // Текст ядра — вызов через границу: берём один раз, а не на кадр.
+            text = { Text(remember { lanWarning() }) },
             confirmButton = {
                 TextButton(onClick = { 
                     showLanWarning = false
@@ -270,6 +274,8 @@ fun SettingsScreen(
     if (showMailSetup) {
         MailSetupDialog(
             torEnabled = torEnabled,
+            account = mailAccount,
+            error = error,
             onDismiss = { showMailSetup = false },
             onConfigure = { addr, pass, iHost, iPort, sHost, sPort, vTor ->
                 viewModel.setMailAccount(addr, pass, iHost, iPort, sHost, sPort, vTor)
@@ -370,15 +376,36 @@ fun TransportsSection(
                         val stateStr = when (status.state) {
                             FfiMailState.OFF -> Strings.MAIL_OFFLINE
                             FfiMailState.NO_ACCOUNT -> Strings.MAIL_NOT_CONFIGURED
-                            FfiMailState.CONNECTING -> "Подключение..."
+                            FfiMailState.CONNECTING -> Strings.MAIL_CONNECTING
                             FfiMailState.READY -> Strings.MAIL_ONLINE
-                            FfiMailState.FAILED -> "Ошибка"
+                            FfiMailState.FAILED -> Strings.MAIL_FAILED
                         }
                         Text(
                             text = stateStr + (status.address?.let { " ($it)" } ?: ""),
                             style = MaterialTheme.typography.labelSmall,
                             color = if (status.state == FfiMailState.FAILED) MaterialTheme.colorScheme.error else if (status.state == FfiMailState.READY) Color(0xFF4CAF50) else MaterialTheme.colorScheme.outline
                         )
+                        // Почему именно так — словами ядра, а не нашей догадкой.
+                        status.detail?.takeIf { it.isNotBlank() }?.let { detail ->
+                            Text(detail, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline)
+                        }
+                        // Заполненность ящика: письма перестанут приходить молча.
+                        val used = status.mailboxUsedBytes
+                        val limit = status.mailboxLimitBytes
+                        if (used != null && limit != null && limit > 0UL) {
+                            Text(
+                                Strings.MAIL_MAILBOX_USED.format(formatFileSize(used), formatFileSize(limit)),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = if (status.mailboxCrowded) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.outline
+                            )
+                            LinearProgressIndicator(
+                                progress = { (used.toFloat() / limit.toFloat()).coerceIn(0f, 1f) },
+                                modifier = Modifier.fillMaxWidth().padding(top = 2.dp)
+                            )
+                        }
+                        if (status.mailboxCrowded) {
+                            Text(Strings.MAIL_MAILBOX_CROWDED, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.error)
+                        }
                         
                         Row(modifier = Modifier.padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             if (mailAccount == null) {
@@ -386,6 +413,9 @@ fun TransportsSection(
                                     Text(Strings.MAIL_SETUP)
                                 }
                             } else {
+                                OutlinedButton(onClick = onShowMailSetup, modifier = Modifier.weight(1f)) {
+                                    Text(Strings.MAIL_EDIT)
+                                }
                                 IconButton(onClick = onShowMailDelete) {
                                     Icon(Icons.Default.Delete, contentDescription = Strings.MAIL_DELETE, tint = MaterialTheme.colorScheme.error)
                                 }
@@ -506,7 +536,7 @@ fun StorageSection(
     scope: kotlinx.coroutines.CoroutineScope
 ) {
     Column {
-        Text(text = "Настройки файлов", style = MaterialTheme.typography.titleMedium)
+        Text(text = Strings.FILE_SETTINGS, style = MaterialTheme.typography.titleMedium)
         Spacer(modifier = Modifier.height(16.dp))
 
         if (!isCompanionMode) {
@@ -522,7 +552,11 @@ fun StorageSection(
 
             Box(modifier = Modifier.padding(vertical = 8.dp)) {
                 OutlinedButton(onClick = { showLimitMenu = true }, modifier = Modifier.fillMaxWidth()) {
-                    val currentLabel = limits.find { it.first == autoAcceptLimit }?.second ?: Strings.LIMIT_NEVER
+                    // Значение могло прийти не отсюда (телефон, другой клиент):
+                    // показываем его как есть, а не молча «никогда».
+                    val currentLabel = limits.find { it.first == autoAcceptLimit }?.second
+                        ?: autoAcceptLimit?.let { Strings.LIMIT_UP_TO.format(formatFileSize(it)) }
+                        ?: Strings.LIMIT_ALWAYS
                     Text("${Strings.AUTO_ACCEPT_LIMIT}: $currentLabel")
                 }
                 DropdownMenu(expanded = showLimitMenu, onDismissRequest = { showLimitMenu = false }) {
@@ -556,15 +590,19 @@ fun StorageSection(
             OutlinedButton(
                 onClick = {
                     viewModel.sweepOrphanFiles { swept ->
-                        val resultText = "Очищено: ${swept.bytes} байт, ${swept.files} файлов."
+                        val resultText = Strings.SWEEP_RESULT.format(
+                            swept.files.toString(),
+                            swept.chunks.toString(),
+                            formatFileSize(swept.bytes),
+                        )
                         scope.launch { snackbarHostState.showSnackbar(resultText) }
                     }
                 },
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text("Очистить потерянные файлы")
-                    Text("Удаляет неиспользуемые фрагменты вложений.", style = MaterialTheme.typography.labelSmall)
+                    Text(Strings.SWEEP_ORPHANS)
+                    Text(Strings.SWEEP_ORPHANS_DESC, style = MaterialTheme.typography.labelSmall)
                 }
             }
         }
@@ -604,15 +642,37 @@ fun ThemeSection(
             }
         }
 
+        Spacer(modifier = Modifier.height(8.dp))
+        // Системный диалог блокирует поток — выбираем файл вне отрисовки.
+        var pickBackground by remember { mutableStateOf(false) }
+        LaunchedEffect(pickBackground) {
+            if (!pickBackground) return@LaunchedEffect
+            val picked = withContext(Dispatchers.IO) { FilePicker.pickImage() }
+            pickBackground = false
+            if (picked != null) {
+                viewModel.updateChatTheme { it.copy(backgroundImageUri = picked.toURI().toString()) }
+            }
+        }
+        OutlinedButton(onClick = { pickBackground = true }, modifier = Modifier.fillMaxWidth()) {
+            Text(if (chatTheme.backgroundImageUri == null) Strings.SET_BACKGROUND else Strings.CHANGE_BACKGROUND)
+        }
+
         if (chatTheme.backgroundImageUri != null) {
             Spacer(modifier = Modifier.height(8.dp))
+            // Пока тянем — только на экране; в настройки пишем по отпусканию,
+            // иначе каждый кадр уходил бы в DataStore.
+            var dragged by remember(chatTheme.backgroundOpacity) { mutableStateOf<Float?>(null) }
+            val shown = dragged ?: chatTheme.backgroundOpacity
             Text(
-                text = "${Strings.BACKGROUND_OPACITY}: ${(chatTheme.backgroundOpacity * 100).toInt()}%",
+                text = "${Strings.BACKGROUND_OPACITY}: ${(shown * 100).toInt()}%",
                 style = MaterialTheme.typography.labelMedium
             )
             Slider(
-                value = chatTheme.backgroundOpacity,
-                onValueChange = { opacity -> viewModel.updateChatTheme { it.copy(backgroundOpacity = opacity) } },
+                value = shown,
+                onValueChange = { dragged = it },
+                onValueChangeFinished = {
+                    dragged?.let { opacity -> viewModel.updateChatTheme { it.copy(backgroundOpacity = opacity) } }
+                },
                 valueRange = 0f..1f
             )
             TextButton(onClick = { viewModel.updateChatTheme { it.copy(backgroundImageUri = null) } }) {
@@ -673,22 +733,34 @@ fun TransportItem(
 @Composable
 fun MailSetupDialog(
     torEnabled: Boolean,
+    /** Уже заведённый ящик — форма открывается заполненной, а не пустой. */
+    account: org.ratatosk.core.FfiMailAccount?,
+    /** Ошибка ядра: по ней снимаем ожидание, иначе кнопка остаётся мёртвой. */
+    error: String?,
     onDismiss: () -> Unit,
     onConfigure: (address: String, password: String, imapHost: String, iPort: Int, sHost: String, sPort: Int, viaTor: Boolean) -> Unit,
     onRegister: (url: String, viaTor: Boolean) -> Unit
 ) {
-    var isRegisterMode by remember { mutableStateOf(true) }
+    // Ящик есть — правим его, а не заводим новый.
+    var isRegisterMode by remember(account) { mutableStateOf(account == null) }
     var isWorking by remember { mutableStateOf(false) }
-    
-    var address by remember { mutableStateOf("") }
-    var password by remember { mutableStateOf("") }
-    var imapHost by remember { mutableStateOf("") }
-    var imapPort by remember { mutableStateOf("993") }
-    var smtpHost by remember { mutableStateOf("") }
-    var smtpPort by remember { mutableStateOf("465") }
-    
+    // Ядро ответило ошибкой — разблокировать кнопку: иначе диалог замирает.
+    LaunchedEffect(error) { if (error != null) isWorking = false }
+
+    var address by remember(account) { mutableStateOf(account?.address ?: "") }
+    var password by remember(account) { mutableStateOf(account?.password ?: "") }
+    var imapHost by remember(account) { mutableStateOf(account?.imapHost ?: "") }
+    var imapPort by remember(account) { mutableStateOf(account?.imapPort?.toString() ?: "993") }
+    var smtpHost by remember(account) { mutableStateOf(account?.smtpHost ?: "") }
+    var smtpPort by remember(account) { mutableStateOf(account?.smtpPort?.toString() ?: "465") }
+
     var registerUrl by remember { mutableStateOf("") }
-    var viaTor by remember { mutableStateOf(torEnabled) }
+    var viaTor by remember(account) { mutableStateOf(account?.viaTor ?: torEnabled) }
+
+    val imapOk = imapPort.toIntOrNull()?.let { it in 1..65535 } == true
+    val smtpOk = smtpPort.toIntOrNull()?.let { it in 1..65535 } == true
+    val manualOk = address.isNotBlank() && password.isNotBlank() &&
+        imapHost.isNotBlank() && smtpHost.isNotBlank() && imapOk && smtpOk
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -720,11 +792,26 @@ fun MailSetupDialog(
                     
                     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         OutlinedTextField(value = imapHost, onValueChange = { imapHost = it }, label = { Text(Strings.MAIL_IMAP_HOST) }, modifier = Modifier.weight(1f))
-                        OutlinedTextField(value = imapPort, onValueChange = { imapPort = it }, label = { Text(Strings.MAIL_IMAP_PORT) }, modifier = Modifier.weight(0.5f))
+                        OutlinedTextField(
+                            value = imapPort,
+                            onValueChange = { imapPort = it.filter { c -> c.isDigit() } },
+                            label = { Text(Strings.MAIL_IMAP_PORT) },
+                            isError = !imapOk,
+                            modifier = Modifier.weight(0.5f)
+                        )
+                    }
+                    if (!imapOk || !smtpOk) {
+                        Text(Strings.MAIL_PORT_INVALID, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.error)
                     }
                     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         OutlinedTextField(value = smtpHost, onValueChange = { smtpHost = it }, label = { Text(Strings.MAIL_SMTP_HOST) }, modifier = Modifier.weight(1f))
-                        OutlinedTextField(value = smtpPort, onValueChange = { smtpPort = it }, label = { Text(Strings.MAIL_SMTP_PORT) }, modifier = Modifier.weight(0.5f))
+                        OutlinedTextField(
+                            value = smtpPort,
+                            onValueChange = { smtpPort = it.filter { c -> c.isDigit() } },
+                            label = { Text(Strings.MAIL_SMTP_PORT) },
+                            isError = !smtpOk,
+                            modifier = Modifier.weight(0.5f)
+                        )
                     }
                 }
                 
@@ -741,13 +828,14 @@ fun MailSetupDialog(
         },
         confirmButton = {
             Button(
-                enabled = !isWorking,
+                // Пустыми полями заведённый ящик не затираем.
+                enabled = !isWorking && if (isRegisterMode) registerUrl.isNotBlank() else manualOk,
                 onClick = {
                     isWorking = true
                     if (isRegisterMode) {
                         onRegister(registerUrl, viaTor)
                     } else {
-                        onConfigure(address, password, imapHost, imapPort.toIntOrNull() ?: 0, smtpHost, smtpPort.toIntOrNull() ?: 0, viaTor)
+                        onConfigure(address, password, imapHost, imapPort.toInt(), smtpHost, smtpPort.toInt(), viaTor)
                     }
                 }
             ) {

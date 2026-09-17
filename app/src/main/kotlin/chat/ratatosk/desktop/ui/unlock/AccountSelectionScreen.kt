@@ -34,6 +34,8 @@ fun AccountSelectionScreen(viewModel: RatatoskViewModel) {
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
 
+    var confirmDelete by remember { mutableStateOf<FfiAccount?>(null) }
+
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
@@ -72,6 +74,11 @@ fun AccountSelectionScreen(viewModel: RatatoskViewModel) {
                                     headlineContent = { Text(item.account.label) },
                                     supportingContent = { Text("ID: ${item.account.id.toHexString().take(8)}...") },
                                     leadingContent = { Icon(Icons.Default.Person, contentDescription = null) },
+                                    trailingContent = {
+                                        IconButton(onClick = { confirmDelete = item.account }) {
+                                            Icon(Icons.Default.Delete, contentDescription = Strings.ACCOUNT_DELETE, tint = MaterialTheme.colorScheme.error)
+                                        }
+                                    },
                                     modifier = Modifier.clickable { viewModel.selectAccount(item.account) }
                                 )
                             }
@@ -174,6 +181,35 @@ fun AccountSelectionScreen(viewModel: RatatoskViewModel) {
         chat.ratatosk.desktop.ui.backup.ImportArchiveFlow(viewModel, onClose = { showImport = false })
     }
     chat.ratatosk.desktop.ui.backup.BackupProgressAndResult(viewModel)
+
+    confirmDelete?.let { account ->
+        AlertDialog(
+            onDismissRequest = { confirmDelete = null },
+            title = { Text(Strings.ACCOUNT_DELETE_TITLE.format(account.label)) },
+            text = {
+                Column {
+                    Text(Strings.ACCOUNT_DELETE_DESC)
+                    Spacer(Modifier.height(8.dp))
+                    // Словами ядра: «стёрто безвозвратно» обещать нельзя.
+                    Text(
+                        Strings.ACCOUNT_DELETE_FLASH_NOTE,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.outline
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        viewModel.wipeAccount(account)
+                        confirmDelete = null
+                    },
+                    colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
+                ) { Text(Strings.DELETE) }
+            },
+            dismissButton = { TextButton(onClick = { confirmDelete = null }) { Text(Strings.CANCEL) } }
+        )
+    }
 
     if (showCompanionSetup) {
         chat.ratatosk.desktop.ui.onboarding.CompanionSetupDialog(

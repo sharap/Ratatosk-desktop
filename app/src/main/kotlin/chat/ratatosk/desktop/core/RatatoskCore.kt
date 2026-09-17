@@ -162,6 +162,21 @@ object RatatoskCore : EventObserver, CompanionObserver {
         }
     }
 
+    /**
+     * Стирает аккаунт целиком — запись в реестре, базу, журнал, вложения.
+     *
+     * Открытый аккаунт ядро стереть не даст: файл из-под живого ядра —
+     * половина базы. «Безвозвратно» обещать нельзя: на флеш-памяти запись
+     * поверх не гарантирована (`FFI` о `wipe`).
+     */
+    @Throws(RatatoskException::class)
+    fun wipeAccount(accountId: ByteArray) {
+        synchronized(this) {
+            val reg = registry ?: throw IllegalStateException("Registry not initialized")
+            reg.wipe(accountId)
+        }
+    }
+
     @Throws(RatatoskException::class)
     fun initializeCompanion(
         inviteUri: String,
