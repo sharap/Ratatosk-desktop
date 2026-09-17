@@ -25,7 +25,7 @@ val coreDir: File = providers.gradleProperty("ratatosk.core.dir")
     .getOrElse(rootDir.resolve("../ratatosk-core"))
 val coreFeatures: String = providers.gradleProperty("ratatosk.features").getOrElse("")
 
-fun Exec.configureCoreBuild(outDir: Provider<Directory>, target: String?) {
+fun Exec.configureCoreBuild(outDir: Provider<Directory>, target: String?, bluetooth: Boolean = true) {
     group = "ratatosk"
     workingDir = coreDir
     // Отладочные символы в дистрибутиве ни к чему, а весят больше самой
@@ -35,6 +35,7 @@ fun Exec.configureCoreBuild(outDir: Provider<Directory>, target: String?) {
     val args = mutableListOf("bash", "tools/build-desktop.sh", "--out", outDir.get().asFile.absolutePath)
     if (coreFeatures.isNotBlank()) args += listOf("--features", coreFeatures)
     if (target != null) args += listOf("--target", target)
+    if (!bluetooth) args += "--no-bt"
     commandLine(args)
 
     inputs.dir(coreDir.resolve("crates")).withPropertyName("crates")
@@ -42,6 +43,7 @@ fun Exec.configureCoreBuild(outDir: Provider<Directory>, target: String?) {
     inputs.file(coreDir.resolve("Cargo.lock")).withPropertyName("cargoLock")
     inputs.file(coreDir.resolve("tools/build-desktop.sh")).withPropertyName("script")
     inputs.property("features", coreFeatures)
+    inputs.property("bluetooth", bluetooth)
     outputs.dir(outDir)
 }
 
@@ -70,9 +72,18 @@ val includeWindows = providers.gradleProperty("ratatosk.windows").map { it.toBoo
 // (и графикой arm64, см. ниже) собирается один jar, который запускается
 // системной JVM и там, и здесь.
 val uniffiArm64Dir = layout.buildDirectory.dir("generated/uniffi-linux-arm64")
+// Эфир в кросс-сборке по умолчанию выключен: `bluer` тянет `libdbus-sys`,
+// а тому нужны заголовки dbus **целевой** архитектуры. Их ставят отдельно
+// (`dpkg --add-architecture arm64`, `libdbus-1-dev:arm64`, кросс-pkg-config),
+// и тогда — `-Pratatosk.arm64.bt=true`.
+val arm64Bluetooth = providers.gradleProperty("ratatosk.arm64.bt").map { it.toBoolean() }.getOrElse(false)
 val buildRustCoreArm64 = tasks.register<Exec>("buildRustCoreArm64") {
     description = "Кросс-сборка ratatosk-ffi под Linux arm64 (glibc)."
-    configureCoreBuild(uniffiArm64Dir, target = "aarch64-unknown-linux-gnu")
+    configureCoreBuild(uniffiArm64Dir, target = "aarch64-unknown-linux-gnu", bluetooth = arm64Bluetooth)
+    // Без этого Rust линкует целевые объекты хозяйским `cc`, и `rust-lld`
+    // отвечает «incompatible with elf64-x86-64» — по сообщению не догадаться.
+    environment("CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER", "aarch64-linux-gnu-gcc")
+    environment("CC_aarch64_unknown_linux_gnu", "aarch64-linux-gnu-gcc")
     doFirst {
         // Иначе падает `cc-rs` на середине сборки `ring`, и по сообщению
         // непонятно, что делать. Говорим прямо и заранее.
@@ -86,6 +97,15 @@ val buildRustCoreArm64 = tasks.register<Exec>("buildRustCoreArm64") {
     }
 }
 val includeArm64 = providers.gradleProperty("ratatosk.arm64").map { it.toBoolean() }.getOrElse(false)
+
+// Имя jar-а Compose берёт по машине сборки («linux-x64»), а внутри лежат обе
+// архитектуры — скажем это в имени, иначе на PinePhone файл выглядит чужим.
+if (includeArm64) {
+    tasks.matching { it.name == "packageUberJarForCurrentOS" }.configureEach {
+        // Тип задачи — `org.gradle.jvm.tasks.Jar`, а не `bundling.Jar`.
+        (this as org.gradle.jvm.tasks.Jar).archiveFileName.set("Ratatosk-linux-x64-arm64-1.0.0.jar")
+    }
+}
 
 kotlin.sourceSets.named("main") {
     kotlin.srcDir(files(uniffiDir.map { it.dir("kotlin") }).builtBy(buildRustCore))

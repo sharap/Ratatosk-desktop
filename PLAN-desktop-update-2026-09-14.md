@@ -760,6 +760,20 @@ npub с копированием, `nostr_direct` с `getNostrDirectWarning()`, �
 > Нужен линкер `aarch64-linux-gnu-gcc` (`ring` собирает C) — задача проверяет его заранее
 > и говорит, что установить.
 >
+> **Собрано и проверено (17.09.2026):** библиотека ядра под arm64 —
+> `ELF 64-bit LSB shared object, ARM aarch64`, и один jar на две архитектуры
+> (`Ratatosk-linux-x64-arm64-1.0.0.jar`, 116 МБ): внутри `linux-x86-64` и
+> `linux-aarch64` для ядра плюс `libskiko-linux-x64.so` и `libskiko-linux-arm64.so`.
+> Запуск системной JVM: `java --enable-native-access=ALL-UNNAMED -jar …`
+> (флаг — из-за `System.load` в JNA; на JDK 24+ иначе предупреждение, дальше будет отказ).
+> Что понадобилось помимо задачи:
+> * `sudo apt install gcc-aarch64-linux-gnu` и `rustup target add aarch64-unknown-linux-gnu`;
+> * `CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER` и `CC_aarch64_unknown_linux_gnu` —
+>   иначе Rust линкует хозяйским `cc`, а `rust-lld` отвечает «incompatible with elf64-x86-64»;
+> * **Bluetooth в кросс-сборке выключен** (`--no-bt`): `bluer` тянет `libdbus-sys`, которому
+>   нужны заголовки dbus целевой архитектуры. С `libdbus-1-dev:arm64` и кросс-pkg-config
+>   включается `-Pratatosk.arm64.bt=true`.
+>
 > **`.deb` под arm64 кросс-сборкой не получить:** `jpackage` кладёт в пакет ту JVM, под
 > которой работает, — пакет надо собирать на arm64 (машина, chroot или CI-раннер).
 > **musl (postmarketOS, Alpine) — отдельная история:** в JNA 5.19.1 нет ни одного

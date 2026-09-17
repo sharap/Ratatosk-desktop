@@ -14,6 +14,16 @@
   `opt/ratatosk/bin/Ratatosk` работают без `jna.library.path`.
 * `.msi` собирается **только на Windows**: на Linux задача молча пропускается.
 
+## 0.1. arm64 (PinePhone с Mobian, одноплатники)
+
+Собирается так: `./gradlew -Pratatosk.arm64=true packageUberJarForCurrentOS`
+(нужны `gcc-aarch64-linux-gnu` и `rustup target add aarch64-unknown-linux-gnu`).
+
+- [ ] На arm64-машине: `java --enable-native-access=ALL-UNNAMED -jar Ratatosk-linux-x64-arm64-1.0.0.jar`
+      — окно открылось, аккаунт создаётся, ядро отвечает.
+- [ ] Bluetooth в этой сборке **выключен** — раздела настроек нет, и это ожидаемо.
+- [ ] `.deb` под arm64 собирать надо на arm64 (jpackage кладёт свою JVM).
+
 ## 1. Аккаунты
 
 - [ ] Создать аккаунт без PIN — обязательное предупреждение ядра до создания.
