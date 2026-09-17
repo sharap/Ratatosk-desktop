@@ -25,6 +25,7 @@ import chat.ratatosk.desktop.ui.RatatoskViewModel
 import chat.ratatosk.desktop.ui.Strings
 import chat.ratatosk.desktop.ui.chat.formatFileSize
 import chat.ratatosk.desktop.ui.components.SecretTextField
+import chat.ratatosk.desktop.ui.theme.successColor
 import chat.ratatosk.desktop.util.FilePicker
 import chat.ratatosk.desktop.util.FileUtils
 import org.ratatosk.core.FfiTransport
@@ -383,7 +384,7 @@ fun TransportsSection(
                         Text(
                             text = stateStr + (status.address?.let { " ($it)" } ?: ""),
                             style = MaterialTheme.typography.labelSmall,
-                            color = if (status.state == FfiMailState.FAILED) MaterialTheme.colorScheme.error else if (status.state == FfiMailState.READY) Color(0xFF4CAF50) else MaterialTheme.colorScheme.outline
+                            color = if (status.state == FfiMailState.FAILED) MaterialTheme.colorScheme.error else if (status.state == FfiMailState.READY) successColor else MaterialTheme.colorScheme.outline
                         )
                         // Почему именно так — словами ядра, а не нашей догадкой.
                         status.detail?.takeIf { it.isNotBlank() }?.let { detail ->
@@ -688,7 +689,7 @@ fun AccountSection(
     isCompanionMode: Boolean
 ) {
     Column {
-        Text(text = "Аккаунт", style = MaterialTheme.typography.titleMedium)
+        Text(text = Strings.ACCOUNT_SECTION, style = MaterialTheme.typography.titleMedium)
         Spacer(modifier = Modifier.height(16.dp))
 
         Button(
@@ -698,7 +699,7 @@ fun AccountSection(
         ) {
             Icon(Icons.AutoMirrored.Filled.Logout, contentDescription = null)
             Spacer(modifier = Modifier.width(8.dp))
-            Text(if (isCompanionMode) "Отвязать и сменить аккаунт" else Strings.EXIT)
+            Text(if (isCompanionMode) Strings.COMPANION_UNLINK else Strings.EXIT)
         }
     }
 }
@@ -719,7 +720,7 @@ fun TransportItem(
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(text = title, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Bold)
                         Spacer(modifier = Modifier.width(8.dp))
-                        Box(modifier = Modifier.size(8.dp).clip(CircleShape).background(if (ready) Color(0xFF4CAF50) else Color.Gray))
+                        Box(modifier = Modifier.size(8.dp).clip(CircleShape).background(if (ready) successColor else MaterialTheme.colorScheme.outline))
                     }
                     Text(text = description, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }

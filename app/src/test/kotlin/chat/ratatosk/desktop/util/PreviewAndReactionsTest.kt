@@ -1,7 +1,9 @@
 package chat.ratatosk.desktop.util
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.ratatosk.core.FfiFile
 import org.ratatosk.core.FfiMessage
@@ -17,6 +19,19 @@ class PreviewAndReactionsTest {
         files = files.map { FfiFile(fileId = ByteArray(16), name = it, sizeBytes = 1uL, incoming = true, accepted = true, complete = true, receivedChunks = 1uL, chunkTotal = 1uL, hasPreview = false, chunkBytes = 0u) },
         replyTo = null, sharedContact = null,
     )
+
+    @Test
+    fun attachmentCountReadsNaturallyInAnyLanguage() {
+        // Формы числа зависят от языка, поэтому проверяем не буквы, а смысл:
+        // число на месте, а «одно» и «много» звучат по-разному.
+        val one = MessagePreview.attachments(1)
+        val two = MessagePreview.attachments(2)
+        val five = MessagePreview.attachments(5)
+        assertTrue(one.contains("1"))
+        assertTrue(two.contains("2"))
+        assertTrue(five.contains("5"))
+        assertNotEquals(one.replace("1", "#"), two.replace("2", "#"))
+    }
 
     @Test
     fun markupIsStrippedToOneLine() {

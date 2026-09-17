@@ -80,7 +80,7 @@ fun ProfileScreen(
                 title = { Text(Strings.PROFILE) },
                 actions = {
                     IconButton(onClick = { viewModel.logout() }) {
-                        Icon(Icons.Default.Logout, contentDescription = "Logout")
+                        Icon(Icons.Default.Logout, contentDescription = Strings.EXIT)
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
@@ -125,7 +125,7 @@ fun ProfileScreen(
                     ) {
                         Icon(Icons.Default.Logout, contentDescription = null)
                         Spacer(modifier = Modifier.width(8.dp))
-                        Text("Сменить аккаунт")
+                        Text(Strings.SWITCH_ACCOUNT)
                     }
                 }
 
@@ -212,7 +212,7 @@ fun ProfileScreen(
                 ) {
                     Icon(Icons.Default.Logout, contentDescription = null)
                     Spacer(modifier = Modifier.width(8.dp))
-                    Text("Сменить аккаунт")
+                    Text(Strings.SWITCH_ACCOUNT)
                 }
 
                 Spacer(modifier = Modifier.height(32.dp))
@@ -428,7 +428,7 @@ fun ProfileDetails(
             )
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
-                    text = fingerprint ?: "Загрузка...",
+                    text = fingerprint ?: Strings.LOADING,
                     style = MaterialTheme.typography.bodyMedium,
                     modifier = Modifier.weight(1f)
                 )
@@ -443,7 +443,7 @@ fun ProfileDetails(
                 IconButton(onClick = {
                     fingerprint?.let { ClipboardUtils.copyToClipboard(it) }
                 }) {
-                    Icon(Icons.Default.ContentCopy, contentDescription = "Copy")
+                    Icon(Icons.Default.ContentCopy, contentDescription = Strings.COPY)
                 }
             }
         }
@@ -460,13 +460,13 @@ fun ProfileDetails(
                 )
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
-                        text = onionAddress ?: "Ожидание Tor...",
+                        text = onionAddress ?: Strings.WAITING_TOR,
                         style = MaterialTheme.typography.bodyMedium,
                         modifier = Modifier.weight(1f)
                     )
                     if (onionAddress != null) {
                         IconButton(onClick = { ClipboardUtils.copyToClipboard(onionAddress) }) {
-                            Icon(Icons.Default.ContentCopy, contentDescription = "Copy")
+                            Icon(Icons.Default.ContentCopy, contentDescription = Strings.COPY)
                         }
                     }
                 }

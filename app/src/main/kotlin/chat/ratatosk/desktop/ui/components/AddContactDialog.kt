@@ -5,6 +5,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import chat.ratatosk.desktop.ui.Strings
 import androidx.compose.ui.unit.dp
 
 @Composable
@@ -14,13 +15,13 @@ fun AddContactDialog(onDismiss: () -> Unit, onAdd: (String, Boolean) -> Unit) {
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Add Contact") },
+        title = { Text(Strings.ADD_CONTACT) },
         text = {
             Column {
                 OutlinedTextField(
                     value = uri,
                     onValueChange = { uri = it },
-                    label = { Text("Ratatosk URI") },
+                    label = { Text(Strings.RATATOSK_URI) },
                     modifier = Modifier.fillMaxWidth(),
                     placeholder = { Text("ratatosk:v0:...") }
                 )
@@ -41,12 +42,12 @@ fun AddContactDialog(onDismiss: () -> Unit, onAdd: (String, Boolean) -> Unit) {
                 onClick = { onAdd(uri, inPerson) },
                 enabled = uri.startsWith("ratatosk:")
             ) {
-                Text("Add")
+                Text(Strings.ADD)
             }
         },
         dismissButton = {
             TextButton(onClick = onDismiss) {
-                Text("Cancel")
+                Text(Strings.CANCEL)
             }
         }
     )

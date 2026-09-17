@@ -211,9 +211,9 @@ private fun iconFor(name: String) = when (name.substringAfterLast('.', "").lower
 fun formatFileSize(bytes: ULong): String {
     val b = bytes.toDouble()
     return when {
-        b < 1024 -> "%.0f Б".format(b)
-        b < 1024 * 1024 -> "%.1f КБ".format(b / 1024)
-        b < 1024 * 1024 * 1024 -> "%.1f МБ".format(b / (1024 * 1024))
-        else -> "%.1f ГБ".format(b / (1024 * 1024 * 1024))
+        b < 1024 -> Strings.SIZE_BYTES.format(b)
+        b < 1024 * 1024 -> Strings.SIZE_KILOBYTES.format(b / 1024)
+        b < 1024 * 1024 * 1024 -> Strings.SIZE_MEGABYTES.format(b / (1024 * 1024))
+        else -> Strings.SIZE_GIGABYTES.format(b / (1024 * 1024 * 1024))
     }
 }

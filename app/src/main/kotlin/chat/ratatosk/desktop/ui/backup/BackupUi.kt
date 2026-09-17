@@ -381,8 +381,8 @@ private fun scopeLabel(scope: FfiExportScope) = when (scope) {
 }
 
 private fun formatBytes(bytes: Long): String = when {
-    bytes >= 1L shl 30 -> "%.1f ГБ".format(bytes / (1L shl 30).toDouble())
-    bytes >= 1L shl 20 -> "%.1f МБ".format(bytes / (1L shl 20).toDouble())
-    bytes >= 1L shl 10 -> "%.0f КБ".format(bytes / (1L shl 10).toDouble())
-    else -> "$bytes Б"
+    bytes >= 1L shl 30 -> Strings.SIZE_GIGABYTES.format(bytes / (1L shl 30).toDouble())
+    bytes >= 1L shl 20 -> Strings.SIZE_MEGABYTES.format(bytes / (1L shl 20).toDouble())
+    bytes >= 1L shl 10 -> Strings.SIZE_KILOBYTES.format(bytes / (1L shl 10).toDouble())
+    else -> Strings.SIZE_BYTES.format(bytes.toDouble())
 }

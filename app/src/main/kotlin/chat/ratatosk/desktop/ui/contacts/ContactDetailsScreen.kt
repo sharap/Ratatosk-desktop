@@ -26,6 +26,7 @@ import chat.ratatosk.desktop.ui.RatatoskViewModel
 import chat.ratatosk.desktop.ui.Strings
 import chat.ratatosk.desktop.ui.components.Avatar
 import chat.ratatosk.desktop.ui.components.PickChatDialog
+import chat.ratatosk.desktop.ui.theme.successColor
 import chat.ratatosk.desktop.util.ClipboardUtils
 import chat.ratatosk.desktop.util.DateUtils
 import chat.ratatosk.desktop.util.toHexString
@@ -196,7 +197,7 @@ fun ContactDetailsScreen(
                         Surface(
                             modifier = Modifier.size(8.dp),
                             shape = CircleShape,
-                            color = Color.Green
+                            color = successColor
                         ) {}
                         Spacer(modifier = Modifier.width(4.dp))
                         Text(
@@ -423,7 +424,7 @@ fun ContactDetailsScreen(
                                 text = Strings.DIRECT_CHANNEL + ": ${direct.name}",
                                 style = MaterialTheme.typography.bodySmall,
                                 fontWeight = FontWeight.Bold,
-                                color = Color.Green
+                                color = successColor
                             )
                         }
                     }

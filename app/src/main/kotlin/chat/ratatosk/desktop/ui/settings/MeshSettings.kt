@@ -19,6 +19,7 @@ import androidx.compose.ui.unit.dp
 import chat.ratatosk.desktop.model.TransportInput
 import chat.ratatosk.desktop.ui.RatatoskViewModel
 import chat.ratatosk.desktop.ui.Strings
+import chat.ratatosk.desktop.ui.theme.successColor
 import chat.ratatosk.desktop.util.ClipboardUtils
 import kotlinx.coroutines.launch
 import org.ratatosk.core.FfiTransport
@@ -377,7 +378,7 @@ private fun TitleWithDot(title: String, ready: Boolean) {
 @Composable
 private fun StatusDot(up: Boolean?) {
     val color = when (up) {
-        true -> Color(0xFF4CAF50)
+        true -> successColor
         false -> MaterialTheme.colorScheme.error
         null -> Color.Gray
     }

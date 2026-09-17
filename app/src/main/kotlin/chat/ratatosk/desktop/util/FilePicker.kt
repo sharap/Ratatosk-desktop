@@ -3,11 +3,12 @@ package chat.ratatosk.desktop.util
 import java.awt.FileDialog
 import java.awt.Frame
 import java.io.File
+import chat.ratatosk.desktop.ui.Strings
 import javax.swing.JFileChooser
 
 object FilePicker {
     fun pickImage(): File? {
-        val dialog = FileDialog(null as Frame?, "Выберите изображение", FileDialog.LOAD)
+        val dialog = FileDialog(null as Frame?, Strings.PICK_IMAGE, FileDialog.LOAD)
         dialog.setFilenameFilter { _, name ->
             val lowercase = name.lowercase()
             lowercase.endsWith(".jpg") || lowercase.endsWith(".jpeg") || lowercase.endsWith(".png")
@@ -19,7 +20,7 @@ object FilePicker {
     fun pickFiles(): List<File> {
         val chooser = JFileChooser()
         chooser.isMultiSelectionEnabled = true
-        chooser.dialogTitle = "Выберите файлы"
+        chooser.dialogTitle = Strings.PICK_FILES
         val result = chooser.showOpenDialog(null)
         return if (result == JFileChooser.APPROVE_OPTION) {
             chooser.selectedFiles.toList()
@@ -50,7 +51,7 @@ object FilePicker {
     fun pickDirectory(): File? {
         val chooser = JFileChooser()
         chooser.fileSelectionMode = JFileChooser.DIRECTORIES_ONLY
-        chooser.dialogTitle = "Выберите папку для загрузок"
+        chooser.dialogTitle = Strings.PICK_DOWNLOAD_DIR
         val result = chooser.showOpenDialog(null)
         return if (result == JFileChooser.APPROVE_OPTION) {
             chooser.selectedFile

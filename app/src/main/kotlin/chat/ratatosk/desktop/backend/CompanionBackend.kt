@@ -95,7 +95,7 @@ class CompanionBackend(val companion: RatatoskCompanion) : Backend {
                 emit(AppEvent.ChatsChanged)
             }
             is FfiCompanionEvent.Unlinked, is FfiCompanionEvent.Revoked -> {
-                failPendingSaves("Телефон не на связи")
+                failPendingSaves(Strings.PHONE_OFFLINE)
                 emit(AppEvent.Unlinked)
             }
             // Ядро отказалось словами — сохранение уже не придёт. Без этого
@@ -228,7 +228,7 @@ class CompanionBackend(val companion: RatatoskCompanion) : Backend {
         // Ядро берёт по одному вложению за раз: второй вызов до конца первого
         // вернётся отказом, а не встанет в очередь (FFI, save_file).
         if (pendingSaves.isNotEmpty() && !pendingSaves.containsKey(key)) {
-            throw IllegalStateException("Уже забираем другое вложение — дождитесь конца")
+            throw IllegalStateException(Strings.FETCH_BUSY)
         }
         val done = CompletableDeferred<Unit>()
         pendingSaves.put(key, done)?.cancel()

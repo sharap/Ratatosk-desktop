@@ -30,6 +30,7 @@ import chat.ratatosk.desktop.ui.Strings
 import chat.ratatosk.desktop.ui.chatlist.SearchBarRow
 import chat.ratatosk.desktop.ui.components.AddContactDialog
 import chat.ratatosk.desktop.ui.components.Avatar
+import chat.ratatosk.desktop.ui.theme.successColor
 import chat.ratatosk.desktop.util.toHexString
 import org.ratatosk.core.FfiContact
 
@@ -152,7 +153,7 @@ private fun ContactRow(
                     Text(name, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
                     if (contact.seenOnLan) {
                         Spacer(Modifier.width(6.dp))
-                        Box(Modifier.size(8.dp).clip(CircleShape).background(Color(0xFF4CAF50)))
+                        Box(Modifier.size(8.dp).clip(CircleShape).background(successColor))
                     }
                 }
             },

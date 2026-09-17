@@ -57,7 +57,7 @@ fun AccountSelectionScreen(viewModel: RatatoskViewModel) {
         },
         floatingActionButton = {
             FloatingActionButton(onClick = { viewModel.setCreatingNewAccount(true) }) {
-                Icon(Icons.Default.Add, contentDescription = "Add Account")
+                Icon(Icons.Default.Add, contentDescription = Strings.GENERATE_IDENTITY)
             }
         }
     ) { padding ->
@@ -90,7 +90,7 @@ fun AccountSelectionScreen(viewModel: RatatoskViewModel) {
                                         Row(verticalAlignment = Alignment.CenterVertically) {
                                             SuggestionChip(
                                                 onClick = {},
-                                                label = { Text("Компаньон", style = MaterialTheme.typography.labelSmall) },
+                                                label = { Text(Strings.COMPANION_BADGE, style = MaterialTheme.typography.labelSmall) },
                                                 icon = { Icon(Icons.Default.Devices, contentDescription = null, modifier = Modifier.size(14.dp)) }
                                             )
                                             Spacer(Modifier.width(8.dp))
@@ -100,7 +100,7 @@ fun AccountSelectionScreen(viewModel: RatatoskViewModel) {
                                     leadingContent = { Icon(Icons.Default.PhoneAndroid, contentDescription = null) },
                                     trailingContent = {
                                         IconButton(onClick = { viewModel.removeCompanionPairing(item.pairing.deviceId) }) {
-                                            Icon(Icons.Default.Delete, contentDescription = "Удалить сопряжение", tint = MaterialTheme.colorScheme.error)
+                                            Icon(Icons.Default.Delete, contentDescription = Strings.PAIRING_DELETE, tint = MaterialTheme.colorScheme.error)
                                         }
                                     },
                                     modifier = Modifier.clickable { viewModel.openCompanionPairing(item.pairing) }

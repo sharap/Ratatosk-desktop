@@ -36,6 +36,7 @@ import chat.ratatosk.desktop.ui.Strings
 import chat.ratatosk.desktop.ui.components.AddContactDialog
 import chat.ratatosk.desktop.ui.components.Avatar
 import chat.ratatosk.desktop.ui.components.CreateGroupDialog
+import chat.ratatosk.desktop.ui.theme.successColor
 import chat.ratatosk.desktop.util.ClipboardUtils
 import chat.ratatosk.desktop.util.DateUtils
 import chat.ratatosk.desktop.util.MessagePreview
@@ -229,7 +230,7 @@ private fun ChatRow(
                     }
                     if (item is ChatItem.Direct && item.contact.seenOnLan) {
                         Spacer(Modifier.width(6.dp))
-                        Box(Modifier.size(8.dp).clip(CircleShape).background(Color(0xFF4CAF50)))
+                        Box(Modifier.size(8.dp).clip(CircleShape).background(successColor))
                     }
                     Spacer(Modifier.weight(1f))
                     last?.let {

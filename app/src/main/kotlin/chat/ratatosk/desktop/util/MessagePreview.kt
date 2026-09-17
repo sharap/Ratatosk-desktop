@@ -32,16 +32,6 @@ object MessagePreview {
         }
     }
 
-    /** «2 вложения», «5 вложений», «21 вложение» — три формы, строкой с %d не выразить. */
-    internal fun attachments(n: Int): String {
-        val mod100 = n % 100
-        val mod10 = n % 10
-        val word = when {
-            mod100 in 11..14 -> "вложений"
-            mod10 == 1 -> "вложение"
-            mod10 in 2..4 -> "вложения"
-            else -> "вложений"
-        }
-        return "[$n $word]"
-    }
+    /** Формы числа зависят от языка — они живут в [Strings]. */
+    internal fun attachments(n: Int): String = Strings.attachments(n)
 }
