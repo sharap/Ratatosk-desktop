@@ -40,6 +40,8 @@ import chat.ratatosk.desktop.model.ChatMessage
 import chat.ratatosk.desktop.model.SharedCard
 import chat.ratatosk.desktop.ui.Strings
 import chat.ratatosk.desktop.ui.components.Avatar
+import chat.ratatosk.desktop.ui.components.LinkConfirmDialog
+import chat.ratatosk.desktop.util.Log
 import chat.ratatosk.desktop.util.MarkdownUtils
 import chat.ratatosk.desktop.util.MessagePreview
 import org.ratatosk.core.FfiDeliveryStatus
@@ -308,7 +310,25 @@ private fun MessageText(
     revealed: Set<Int>,
     onReveal: (Int) -> Unit,
 ) {
-    val parsed = remember(body, accent) { MarkdownUtils.parseMarkdown(body, accent) }
+    // Ссылка, по которой нажали: адрес и его подпись в тексте.
+    var pendingLink by remember { mutableStateOf<Pair<String, String>?>(null) }
+    val parsed = remember(body, accent) {
+        MarkdownUtils.parseMarkdown(body, accent) { url, shown -> pendingLink = url to shown }
+    }
+
+    pendingLink?.let { (url, shown) ->
+        LinkConfirmDialog(
+            url = url,
+            shownText = shown,
+            onDismiss = { pendingLink = null },
+            onOpen = { address ->
+                // Открывать нечем — лучше сказать в журнал, чем уронить окно.
+                runCatching { java.awt.Desktop.getDesktop().browse(java.net.URI(address)) }
+                    .onFailure { Log.w("MessageBubble", "Failed to open link: ${it.message}") }
+            },
+        )
+    }
+
     val long = parsed.length > COLLAPSE_CHARS
     val shown = remember(parsed, expanded, revealed, contentColor) {
         val base = if (long && !expanded) parsed.subSequence(0, COLLAPSE_CHARS) else parsed

@@ -470,6 +470,26 @@ object Strings {
     val AVATAR_CROP_HINT = tr("Колесо мыши — масштаб, перетаскивание — сдвиг", "Mouse wheel — zoom, drag — move")
     val AVATAR_CROP_FAILED = tr("Не удалось подготовить картинку — прежняя осталась на месте", "Could not prepare the image — the previous one stayed in place")
     val AVATAR_CHANGE = tr("Сменить картинку", "Change picture")
+    val AVATAR_REMOVE = tr("Удалить фото", "Remove photo")
+
+    // Переход по ссылке: её прислал собеседник, и подпись у неё любая.
+    val LINK_OPEN_TITLE = tr("Перейти по ссылке?", "Open this link?")
+    val LINK_LEADS_TO = tr("Ведёт на", "Leads to")
+    val LINK_UNKNOWN_HOST = tr("Адрес не удалось разобрать", "The address could not be read")
+    val LINK_OPEN = tr("Перейти", "Open")
+    val LINK_WARN_SHOWN_HOST = tr(
+        "В тексте написано %s, а ведёт в другое место",
+        "The text says %s, the address leads elsewhere",
+    )
+    val LINK_WARN_USERINFO = tr(
+        "Всё, что до @, — не адрес: ведёт на %s",
+        "Everything before @ is not the address — it leads to %s",
+    )
+    val LINK_WARN_PUNYCODE = tr(
+        "Хост записан кодом (xn--): он может выглядеть как другой",
+        "The host is written in punycode (xn--): it may look like another one",
+    )
+    val LINK_WARN_SCHEME = tr("Это не веб-адрес: %s", "This is not a web address: %s")
     val PROFILE_COMPANION_DESC = tr("Это второй экран телефона: ключи, отпечаток и ссылка-приглашение живут на телефоне. Фото профиля можно посмотреть и сменить здесь — оно уйдёт на телефон. Имя задаётся на телефоне.", "This is the second screen of your phone: the keys, the fingerprint and the invite link live on the phone. The profile photo can be viewed and changed here — it will go to the phone. The name is set on the phone.")
     val CONTACT_COMPANION_DESC = tr("Второй экран показывает только имя и фото: ключей и сверки личности на нём нет. Подтвердить личность можно на телефоне.", "The second screen shows only the name and photo: it has no keys and no identity check. Identity can be verified on the phone.")
 

@@ -109,6 +109,7 @@ fun ProfileScreen(
                         myAvatar = myAvatar,
                         userName = userName,
                         onEditAvatar = { pickAvatar = true },
+                        onRemoveAvatar = { viewModel.setAvatar(null) },
                         onEditName = if (isCompanionMode) null else ({
                             newName = userName ?: ""
                             showEditName = true
@@ -176,6 +177,7 @@ fun ProfileScreen(
                     myAvatar = myAvatar,
                     userName = userName,
                     onEditAvatar = { pickAvatar = true },
+                    onRemoveAvatar = { viewModel.setAvatar(null) },
                     onEditName = if (isCompanionMode) null else ({
                         newName = userName ?: ""
                         showEditName = true
@@ -318,6 +320,10 @@ fun ProfileScreen(
     }
 }
 
+/**
+ * @param onRemoveAvatar снять фото совсем (`set_avatar(null)` у ядра).
+ *   `null` — снимать нечего или некому.
+ */
 @Composable
 fun ProfileHeader(
     myAvatar: ByteArray?,
@@ -325,8 +331,11 @@ fun ProfileHeader(
     onEditAvatar: () -> Unit,
     /** `null` — имя менять нельзя (у компаньона его задаёт телефон). */
     onEditName: (() -> Unit)?,
-    isCompact: Boolean = false
+    isCompact: Boolean = false,
+    onRemoveAvatar: (() -> Unit)? = null,
 ) {
+    var photoMenu by remember { mutableStateOf(false) }
+
     Box(contentAlignment = Alignment.BottomEnd) {
         Avatar(
             avatarBytes = myAvatar,
@@ -335,13 +344,26 @@ fun ProfileHeader(
             size = null,
             shape = RectangleShape
         )
-        SmallFloatingActionButton(
-            onClick = onEditAvatar,
-            modifier = Modifier.size(32.dp),
-            shape = CircleShape,
-            containerColor = MaterialTheme.colorScheme.primaryContainer
-        ) {
-            Icon(Icons.Default.CameraAlt, contentDescription = Strings.EDIT, modifier = Modifier.size(16.dp))
+        Box {
+            SmallFloatingActionButton(
+                // Пока фото нет, выбирать не из чего: сразу к выбору файла.
+                onClick = { if (myAvatar != null && onRemoveAvatar != null) photoMenu = true else onEditAvatar() },
+                modifier = Modifier.size(32.dp),
+                shape = CircleShape,
+                containerColor = MaterialTheme.colorScheme.primaryContainer
+            ) {
+                Icon(Icons.Default.CameraAlt, contentDescription = Strings.AVATAR_CHANGE, modifier = Modifier.size(16.dp))
+            }
+            DropdownMenu(expanded = photoMenu, onDismissRequest = { photoMenu = false }) {
+                DropdownMenuItem(
+                    text = { Text(Strings.AVATAR_CHANGE) },
+                    onClick = { photoMenu = false; onEditAvatar() },
+                )
+                DropdownMenuItem(
+                    text = { Text(Strings.AVATAR_REMOVE) },
+                    onClick = { photoMenu = false; onRemoveAvatar?.invoke() },
+                )
+            }
         }
     }
     

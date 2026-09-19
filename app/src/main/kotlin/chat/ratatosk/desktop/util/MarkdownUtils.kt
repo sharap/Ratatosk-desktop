@@ -28,13 +28,21 @@ object MarkdownUtils {
     )
     private val parser = Parser.builder().extensions(extensions).build()
 
-    fun parseMarkdown(text: String, linkColor: Color): AnnotatedString {
+    /**
+     * @param onLink нажатие на ссылку: адрес и его подпись. `null` — ссылки
+     *   только подсвечиваются (превью, уведомления: нажимать там нечего).
+     */
+    fun parseMarkdown(
+        text: String,
+        linkColor: Color,
+        onLink: ((String, String) -> Unit)? = null,
+    ): AnnotatedString {
         // Pre-processor for spoilers ||text||
         val processedText = text.replace(Regex("\\|\\|(.+?)\\|\\|"), "%%SPOILER_START%%$1%%SPOILER_END%%")
         
         val document = parser.parse(processedText)
         return buildAnnotatedString {
-            val visitor = ComposeAnnotatedStringVisitor(this, linkColor)
+            val visitor = ComposeAnnotatedStringVisitor(this, linkColor, onLink)
             document.accept(visitor)
         }
     }
@@ -80,12 +88,27 @@ object MarkdownUtils {
 
     private val SAFE_SCHEMES = setOf("http", "https", "mailto")
 
+    /** Текст подписи ссылки: всё, что под ней написано, без разметки. */
+    private fun linkLabel(link: Link): String = buildString {
+        fun walk(node: org.commonmark.node.Node?) {
+            var child = node
+            while (child != null) {
+                if (child is Text) append(child.literal)
+                walk(child.firstChild)
+                child = child.next
+            }
+        }
+        walk(link.firstChild)
+    }
+
     fun isSafeLink(destination: String): Boolean =
         destination.substringBefore(':', "").lowercase() in SAFE_SCHEMES
 
     private class ComposeAnnotatedStringVisitor(
         private val builder: AnnotatedString.Builder,
-        private val linkColor: Color
+        private val linkColor: Color,
+        /** Нажали на ссылку: адрес и его подпись. `null` — ссылки не нажимаются. */
+        private val onLink: ((String, String) -> Unit)?,
     ) : AbstractVisitor() {
         
         override fun visit(text: Text) {
@@ -158,8 +181,20 @@ object MarkdownUtils {
             // Ссылку прислал собеседник: открываем только веб и почту. `file:`
             // или нестандартная схема открылась бы системным приложением —
             // это уже не ссылка, а запуск чего-то на этой машине.
-            if (isSafeLink(link.destination)) {
-                builder.withLink(LinkAnnotation.Url(link.destination, TextLinkStyles(style))) {
+            val handler = onLink
+            if (isSafeLink(link.destination) && handler != null) {
+                // Нажатие не открывает, а спрашивает: подпись у ссылки любая,
+                // и куда она ведёт, человек должен увидеть до перехода.
+                // Подпись берётся из разметки, а не из уже собранной строки:
+                // на момент нажатия та давно доросла до конца сообщения.
+                val label = linkLabel(link)
+                builder.withLink(
+                    LinkAnnotation.Clickable(
+                        tag = link.destination,
+                        styles = TextLinkStyles(style),
+                        linkInteractionListener = { handler(link.destination, label) },
+                    )
+                ) {
                     visitChildren(link)
                 }
             } else {

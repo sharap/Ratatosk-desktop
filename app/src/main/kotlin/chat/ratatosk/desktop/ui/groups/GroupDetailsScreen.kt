@@ -149,11 +149,25 @@ fun GroupDetailsScreen(
                     }
                 }
                 if (canManage) {
-                    SmallFloatingActionButton(
-                        onClick = { pickAvatar = true },
-                        containerColor = MaterialTheme.colorScheme.primaryContainer
-                    ) {
-                        Icon(Icons.Default.CameraAlt, contentDescription = Strings.AVATAR_CHANGE, modifier = Modifier.size(18.dp))
+                    var photoMenu by remember { mutableStateOf(false) }
+                    Box {
+                        SmallFloatingActionButton(
+                            // Пока картинки нет, выбирать не из чего.
+                            onClick = { if (avatar != null) photoMenu = true else pickAvatar = true },
+                            containerColor = MaterialTheme.colorScheme.primaryContainer
+                        ) {
+                            Icon(Icons.Default.CameraAlt, contentDescription = Strings.AVATAR_CHANGE, modifier = Modifier.size(18.dp))
+                        }
+                        DropdownMenu(expanded = photoMenu, onDismissRequest = { photoMenu = false }) {
+                            DropdownMenuItem(
+                                text = { Text(Strings.AVATAR_CHANGE) },
+                                onClick = { photoMenu = false; pickAvatar = true },
+                            )
+                            DropdownMenuItem(
+                                text = { Text(Strings.AVATAR_REMOVE) },
+                                onClick = { photoMenu = false; viewModel.setGroupAvatar(chatId, null) },
+                            )
+                        }
                     }
                 }
             }
