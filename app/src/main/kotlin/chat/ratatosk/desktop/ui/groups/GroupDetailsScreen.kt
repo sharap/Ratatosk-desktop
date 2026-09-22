@@ -11,6 +11,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Chat
 import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.filled.CameraAlt
+import androidx.compose.material.icons.filled.Campaign
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Groups
@@ -93,6 +94,7 @@ fun GroupDetailsScreen(
     var showLeave by remember { mutableStateOf(false) }
     var showClear by remember { mutableStateOf(false) }
     var evicting by remember { mutableStateOf<GroupMember?>(null) }
+    var showUnsubscribe by remember { mutableStateOf(false) }
 
     LaunchedEffect(hex) { viewModel.loadMembers(chatId) }
 
@@ -100,7 +102,8 @@ fun GroupDetailsScreen(
         snackbarHost = { SnackbarHost(snackbar) },
         topBar = {
             TopAppBar(
-                title = { Text(Strings.GROUP_INFO) },
+                // Канал человеку обещан каналом, и называть его группой нельзя.
+                title = { Text(if (group?.channel != null) Strings.CHANNEL_DETAILS else Strings.GROUP_INFO) },
                 navigationIcon = {
                     if (showBackButton) {
                         IconButton(onClick = onBack) {
@@ -126,13 +129,19 @@ fun GroupDetailsScreen(
                 .verticalScroll(rememberScrollState()),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
+            val channel = group.channel
+            // Названия у канала может не быть вовсе, пока не приехало
+            // представление: в ссылке его подписать нечем (§10.5).
+            val shownTitle = group.title.ifBlank {
+                if (channel != null) Strings.CHANNEL_NO_TITLE_YET else ""
+            }
             val avatar = groupAvatars[hex] ?: viewModel.getGroupAvatar(chatId)
             // Картинку группы меняет только тот, кто ей распоряжается (DESKTOP.md).
             Box(contentAlignment = Alignment.BottomEnd) {
                 if (avatar != null) {
                     Avatar(
                         avatarBytes = avatar,
-                        name = group.title,
+                        name = shownTitle,
                         modifier = Modifier.size(160.dp),
                         size = null,
                         shape = RectangleShape
@@ -144,7 +153,12 @@ fun GroupDetailsScreen(
                         color = MaterialTheme.colorScheme.tertiaryContainer
                     ) {
                         Box(contentAlignment = Alignment.Center) {
-                            Icon(Icons.Default.Groups, null, modifier = Modifier.size(64.dp), tint = MaterialTheme.colorScheme.onTertiaryContainer)
+                            Icon(
+                                if (channel != null) Icons.Default.Campaign else Icons.Default.Groups,
+                                null,
+                                modifier = Modifier.size(64.dp),
+                                tint = MaterialTheme.colorScheme.onTertiaryContainer,
+                            )
                         }
                     }
                 }
@@ -174,10 +188,13 @@ fun GroupDetailsScreen(
             Spacer(Modifier.height(12.dp))
 
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(group.title, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+                Text(shownTitle, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
                 if (canManage) {
                     IconButton(onClick = { showRename = true }) {
-                        Icon(Icons.Default.Edit, contentDescription = Strings.GROUP_RENAME)
+                        Icon(
+                            Icons.Default.Edit,
+                            contentDescription = if (channel != null) Strings.CHANNEL_RENAME else Strings.GROUP_RENAME,
+                        )
                     }
                 }
             }
@@ -190,7 +207,11 @@ fun GroupDetailsScreen(
             }
             if (!group.joined) {
                 Spacer(Modifier.height(8.dp))
-                Text(Strings.GROUP_YOU_LEFT, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.outline)
+                Text(
+                    if (channel != null) Strings.CHANNEL_LEFT else Strings.GROUP_YOU_LEFT,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.outline,
+                )
             }
 
             Spacer(Modifier.height(16.dp))
@@ -200,18 +221,37 @@ fun GroupDetailsScreen(
                     Spacer(Modifier.width(8.dp))
                     Text(Strings.GROUP_OPEN_CHAT)
                 }
-                if (group.joined) {
+                if (group.joined && channel == null) {
                     OutlinedButton(onClick = { showInvite = true }) {
                         Icon(Icons.Default.PersonAdd, null)
                         Spacer(Modifier.width(8.dp))
                         Text(Strings.GROUP_INVITE)
                     }
                 }
+                // Уход из канала — это отписка (§10.6), и она уносит архив.
+                // Из своего канала уходить некуда, и удаления ядро не даёт.
+                if (channel != null && !channel.mine) {
+                    OutlinedButton(onClick = { showUnsubscribe = true }) {
+                        Text(Strings.CHANNEL_UNSUBSCRIBE)
+                    }
+                }
             }
+
+            if (channel != null) {
+                Spacer(Modifier.height(20.dp))
+                chat.ratatosk.desktop.ui.channels.ChannelSection(viewModel, chatId, channel)
+            }
+
+            // Состава у читателя канала нет, и это свойство, а не пропуск
+            // (§3.2): читатели друг друга не знают. Список из себя одного
+            // читался бы как неполнота.
+            if (channel != null && !channel.mine) return@Column
 
             Spacer(Modifier.height(24.dp))
             Text(
-                if (members != null) Strings.GROUP_MEMBERS_COUNT.format(members.size) else Strings.GROUP_MEMBERS,
+                if (channel != null) Strings.CHANNEL_READERS
+                else if (members != null) Strings.GROUP_MEMBERS_COUNT.format(members.size)
+                else Strings.GROUP_MEMBERS,
                 style = MaterialTheme.typography.titleMedium,
                 modifier = Modifier.fillMaxWidth()
             )
@@ -317,6 +357,13 @@ fun GroupDetailsScreen(
                 viewModel.evictFromGroup(chatId, member.chatId)
                 evicting = null
             }
+        )
+    }
+
+    if (showUnsubscribe) {
+        chat.ratatosk.desktop.ui.channels.UnsubscribeChannelDialog(
+            onConfirm = { viewModel.unsubscribeFromChannel(chatId); onBack() },
+            onDismiss = { showUnsubscribe = false },
         )
     }
 

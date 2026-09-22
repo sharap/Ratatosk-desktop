@@ -15,6 +15,7 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Campaign
+import androidx.compose.material.icons.filled.Link
 import androidx.compose.material.icons.filled.Groups
 import androidx.compose.material.icons.filled.PersonAdd
 import androidx.compose.material.icons.filled.Search
@@ -60,6 +61,8 @@ fun ChatListScreen(
     var showAddDialog by remember { mutableStateOf(false) }
     var showCreateGroup by remember { mutableStateOf(false) }
     var showFabMenu by remember { mutableStateOf(false) }
+    var showCreateChannel by remember { mutableStateOf(false) }
+    var showSubscribeChannel by remember { mutableStateOf(false) }
     var query by remember { mutableStateOf("") }
     var searchOpen by remember { mutableStateOf(false) }
 
@@ -133,6 +136,16 @@ fun ChatListScreen(
                             leadingIcon = { Icon(Icons.Default.Groups, null) },
                             onClick = { showFabMenu = false; showCreateGroup = true },
                         )
+                        DropdownMenuItem(
+                            text = { Text(Strings.CHANNEL_CREATE) },
+                            leadingIcon = { Icon(Icons.Default.Campaign, null) },
+                            onClick = { showFabMenu = false; showCreateChannel = true },
+                        )
+                        DropdownMenuItem(
+                            text = { Text(Strings.CHANNEL_SUBSCRIBE) },
+                            leadingIcon = { Icon(Icons.Default.Link, null) },
+                            onClick = { showFabMenu = false; showSubscribeChannel = true },
+                        )
                     }
                 }
             }
@@ -170,6 +183,14 @@ fun ChatListScreen(
     }
 
     if (showManual) ManualLinkDialog(endpoint) { showManual = false }
+
+    if (showCreateChannel) {
+        chat.ratatosk.desktop.ui.channels.CreateChannelDialog(viewModel) { showCreateChannel = false }
+    }
+
+    if (showSubscribeChannel) {
+        chat.ratatosk.desktop.ui.channels.SubscribeChannelDialog(viewModel) { showSubscribeChannel = false }
+    }
 
     if (showCreateGroup) {
         val notices = viewModel.groupNotices

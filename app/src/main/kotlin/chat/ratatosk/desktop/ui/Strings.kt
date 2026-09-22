@@ -496,6 +496,7 @@ object Strings {
     )
 
     val CHANNEL_CREATE = tr("Создать канал", "Create a channel")
+    val CHANNEL_CREATE_ACTION = tr("Завести", "Create")
     val CHANNEL_TITLE_HINT = tr("Название канала", "Channel name")
     val CHANNEL_SUBSCRIBE = tr("Подписаться на канал", "Subscribe to a channel")
     val CHANNEL_SUBSCRIBE_HINT = tr("Ссылка на канал", "Channel link")
