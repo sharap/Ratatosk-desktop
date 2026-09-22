@@ -29,6 +29,17 @@ interface TransportsApi {
     val btHasRadio: StateFlow<Boolean>
     val onionAddress: StateFlow<String?>
     val cardVersion: StateFlow<ULong?>
+
+    /**
+     * Пределы отдачи (§9.2): сколько блоков в минуту одному и всем вместе.
+     *
+     * Числа лежат в ядре на диске и переживают перезапуск: сервера нет,
+     * значит ограничителя частоты нет ни у кого, кроме нас самих.
+     */
+    val givingLimits: StateFlow<org.ratatosk.core.FfiGivingLimits?>
+    fun refreshGivingLimits()
+    fun setGivingLimits(perPeer: UInt, total: UInt)
+
     fun refreshTransportStatus()
     fun setTransportEnabled(transport: FfiTransport, enabled: Boolean)
     fun setMailAccount(address: String, password: String, imapHost: String, imapPort: Int, smtpHost: String, smtpPort: Int, viaTor: Boolean)
@@ -78,6 +89,28 @@ class TransportsModel(session: SessionContext) : FeatureModel(session), Transpor
     override val cardVersion = _cardVersion.asStateFlow()
 
     private var isAnnouncingTor = false
+
+    private val _givingLimits = MutableStateFlow<org.ratatosk.core.FfiGivingLimits?>(null)
+    override val givingLimits = _givingLimits.asStateFlow()
+
+    override fun refreshGivingLimits() {
+        session.clientIo { client ->
+            val limits = client.givingLimits()
+            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                _givingLimits.value = limits
+            }
+        }
+    }
+
+    override fun setGivingLimits(perPeer: UInt, total: UInt) {
+        session.clientIo("Failed to set giving limits") { client ->
+            client.setGivingLimits(org.ratatosk.core.FfiGivingLimits(perPeer = perPeer, total = total))
+            val limits = client.givingLimits()
+            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                _givingLimits.value = limits
+            }
+        }
+    }
 
     override fun refreshTransportStatus() {
         session.clientIo { client ->

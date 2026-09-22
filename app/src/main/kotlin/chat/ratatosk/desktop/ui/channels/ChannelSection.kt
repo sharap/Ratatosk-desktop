@@ -55,6 +55,7 @@ fun ChannelSection(
     var showPow by remember { mutableStateOf(false) }
     var showLink by remember { mutableStateOf(false) }
     var showAdmitContact by remember { mutableStateOf(false) }
+    var showAddAuthor by remember { mutableStateOf(false) }
     var confirmAnnounce by remember { mutableStateOf(false) }
     var confirmNarrow by remember { mutableStateOf<FfiSharingLevel?>(null) }
 
@@ -250,7 +251,28 @@ fun ChannelSection(
         }
 
         Spacer(Modifier.height(16.dp))
-        Text(Strings.CHANNEL_GRANTS, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                Strings.CHANNEL_GRANTS,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.weight(1f),
+            )
+            // В открытом канале списка читателей нет вовсе — читает любой,
+            // у кого ссылка, — поэтому соавтора выбирают из контактов.
+            // Право выдаёт только владелец: раздача прав не делегируется
+            // никогда, иначе это совладение (§6.2).
+            OutlinedButton(onClick = { showAddAuthor = true }) {
+                Icon(Icons.Default.PersonAdd, null)
+                Spacer(Modifier.width(8.dp))
+                Text(Strings.CHANNEL_ADD_AUTHOR)
+            }
+        }
+        Text(
+            Strings.CHANNEL_ADD_AUTHOR_DESC,
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.outline,
+        )
         if (channel.grantsExpiring > 0u) {
             Text(
                 Strings.CHANNEL_GRANTS_EXPIRING.format(channel.grantsExpiring.toInt()),
@@ -298,7 +320,26 @@ fun ChannelSection(
     }
 
     if (showAdmitContact) {
-        AdmitContactDialog(viewModel, chatId, admits[hex].orEmpty()) { showAdmitContact = false }
+        PickChannelContactDialog(
+            viewModel = viewModel,
+            title = Strings.CHANNEL_ADMIT_CONTACT,
+            desc = Strings.CHANNEL_ADMIT_CONTACT_DESC,
+            exclude = admits[hex].orEmpty().map { it.peerIk },
+            onPick = { who, _ -> viewModel.admitToChannel(chatId, who) },
+            onDismiss = { showAdmitContact = false },
+        )
+    }
+
+    if (showAddAuthor) {
+        PickChannelContactDialog(
+            viewModel = viewModel,
+            title = Strings.CHANNEL_ADD_AUTHOR,
+            desc = Strings.CHANNEL_ADD_AUTHOR_DESC,
+            // Уже одарённые правятся в списке выдач, а не заводятся заново.
+            exclude = grants[hex].orEmpty().map { it.peerIk },
+            onPick = { who, name -> editingRight = who to name },
+            onDismiss = { showAddAuthor = false },
+        )
     }
 
     if (showRotate) {

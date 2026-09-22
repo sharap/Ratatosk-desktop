@@ -23,7 +23,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.toComposeImageBitmap
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
-import chat.ratatosk.desktop.backend.ChannelAdmit
 import chat.ratatosk.desktop.ui.RatatoskViewModel
 import chat.ratatosk.desktop.ui.Strings
 import chat.ratatosk.desktop.ui.components.Avatar
@@ -375,31 +374,37 @@ fun ChannelPowDialog(current: UInt, onConfirm: (UInt) -> Unit, onDismiss: () -> 
 }
 
 /**
- * Впустить контакт, не дожидаясь заявки (§6.5, §10.4).
+ * Выбор контакта для канала.
  *
- * Ключ чтения запечатывается на карточку впускаемого — поэтому впустить
- * так можно только контакт, и ссылка никому не нужна.
+ * Годится и впуску, и выдаче права: и то и другое адресовано человеку,
+ * чья карточка у нас есть — ключ чтения запечатывается на неё, а право
+ * выдаётся на его ключ. Список здесь из контактов именно поэтому.
+ *
+ * @param exclude кого не предлагать: уже впущенных или уже одарённых.
+ * @param onPick что сделать с выбранным.
  */
 @Composable
-fun AdmitContactDialog(
+fun PickChannelContactDialog(
     viewModel: RatatoskViewModel,
-    chatId: ByteArray,
-    alreadyIn: List<ChannelAdmit>,
+    title: String,
+    desc: String,
+    exclude: List<ByteArray>,
+    onPick: (peerIk: ByteArray, name: String) -> Unit,
     onDismiss: () -> Unit,
 ) {
     val contacts by viewModel.contacts.collectAsState()
     val avatars by viewModel.contactAvatars.collectAsState()
-    val available = remember(contacts, alreadyIn) {
-        contacts.filterNot { c -> alreadyIn.any { it.peerIk.contentEquals(c.peerIk) } }
+    val available = remember(contacts, exclude) {
+        contacts.filterNot { c -> exclude.any { it.contentEquals(c.peerIk) } }
     }
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(Strings.CHANNEL_ADMIT_CONTACT) },
+        title = { Text(title) },
         text = {
             Column(Modifier.widthIn(max = 520.dp)) {
                 Text(
-                    text = Strings.CHANNEL_ADMIT_CONTACT_DESC,
+                    text = desc,
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -420,7 +425,7 @@ fun AdmitContactDialog(
                                     )
                                 },
                                 modifier = Modifier.clickable {
-                                    viewModel.admitToChannel(chatId, contact.peerIk)
+                                    onPick(contact.peerIk, name)
                                     onDismiss()
                                 },
                             )

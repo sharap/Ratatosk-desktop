@@ -62,6 +62,14 @@ sealed interface AppEvent {
     /** Раздача канала изменилась: наша или чья-то (§7.5). */
     data class SeedingChanged(val chatId: ByteArray) : AppEvent
 
+    /**
+     * У тех, кого спросили, более раннего в канале нет (§7.4).
+     *
+     * Ответ окончателен ровно настолько, насколько полон каталог:
+     * появится сид с более длинным архивом — и просьба снова даст страницу.
+     */
+    data class ChannelHistoryEnd(val chatId: ByteArray) : AppEvent
+
     // --- Переписка --------------------------------------------------------
     /** Последние сообщения чата — заменяют показанные. */
     data class HistoryLoaded(val chatId: ByteArray, val messages: List<FfiMessage>, val fresh: Boolean) : AppEvent

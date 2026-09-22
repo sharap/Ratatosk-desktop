@@ -500,6 +500,58 @@ fun BluetoothSection(viewModel: RatatoskViewModel) {
 }
 
 /** Журнал ядра — для разбора неполадок; настройка процесса, действует со следующего запуска. */
+/**
+ * Пределы отдачи (§9.2).
+ *
+ * Числа живут в ядре на диске и переживают перезапуск. Рядом сказано,
+ * почему они вообще есть: сервера нет, значит ограничителя частоты нет
+ * ни у кого, кроме нас самих.
+ */
+@Composable
+fun GivingLimitsSection(viewModel: RatatoskViewModel) {
+    val limits by viewModel.givingLimits.collectAsState()
+
+    LaunchedEffect(Unit) { viewModel.refreshGivingLimits() }
+
+    var perPeer by remember(limits) { mutableStateOf(limits?.perPeer?.toString() ?: "") }
+    var total by remember(limits) { mutableStateOf(limits?.total?.toString() ?: "") }
+    val parsedPeer = perPeer.toUIntOrNull()
+    val parsedTotal = total.toUIntOrNull()
+    val changed = limits != null && parsedPeer != null && parsedTotal != null &&
+        (parsedPeer != limits?.perPeer || parsedTotal != limits?.total)
+
+    Column {
+        Text(Strings.GIVING_LIMITS, style = MaterialTheme.typography.titleMedium)
+        Spacer(Modifier.height(4.dp))
+        Text(
+            Strings.GIVING_LIMITS_DESC,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Spacer(Modifier.height(8.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+            OutlinedTextField(
+                value = perPeer,
+                onValueChange = { perPeer = it.filter { ch -> ch.isDigit() }.take(6) },
+                label = { Text(Strings.GIVING_LIMITS_PER_PEER) },
+                singleLine = true,
+                modifier = Modifier.width(180.dp),
+            )
+            OutlinedTextField(
+                value = total,
+                onValueChange = { total = it.filter { ch -> ch.isDigit() }.take(6) },
+                label = { Text(Strings.GIVING_LIMITS_TOTAL) },
+                singleLine = true,
+                modifier = Modifier.width(180.dp),
+            )
+            Button(
+                onClick = { viewModel.setGivingLimits(parsedPeer!!, parsedTotal!!) },
+                enabled = changed,
+            ) { Text(Strings.SAVE) }
+        }
+    }
+}
+
 @Composable
 fun DiagnosticsSection(viewModel: RatatoskViewModel) {
     val logEnabled by viewModel.coreLogEnabled.collectAsState()

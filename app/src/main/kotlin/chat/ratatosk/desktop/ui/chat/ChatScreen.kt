@@ -302,6 +302,46 @@ fun ChatScreen(
                         }
                     },
                 )
+                // Вступление в канал историю не тянет (§7.4): лента
+                // начинается с первого живого слова, а более раннее — по
+                // просьбе. Иначе подписавшийся оплачивал бы год чужой
+                // переписки, которого не просил.
+                group?.channel?.let {
+                    val pulling by viewModel.historyPulling.collectAsState()
+                    val ended by viewModel.historyEnded.collectAsState()
+                    val hex = chatId.toHexString()
+                    Surface(tonalElevation = 1.dp, modifier = Modifier.fillMaxWidth()) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            when {
+                                pulling[hex] == true -> {
+                                    CircularProgressIndicator(Modifier.size(14.dp), strokeWidth = 2.dp)
+                                    Spacer(Modifier.width(8.dp))
+                                    Text(Strings.CHANNEL_HISTORY_PULLING, style = MaterialTheme.typography.labelSmall)
+                                }
+                                ended[hex] == true -> {
+                                    Text(
+                                        Strings.CHANNEL_HISTORY_END,
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.outline,
+                                        modifier = Modifier.weight(1f),
+                                    )
+                                    TextButton(onClick = { viewModel.pullOlderHistory(chatId) }) {
+                                        Text(Strings.RETRY)
+                                    }
+                                }
+                                else -> {
+                                    Spacer(Modifier.weight(1f))
+                                    TextButton(onClick = { viewModel.pullOlderHistory(chatId) }) {
+                                        Text(Strings.CHANNEL_HISTORY_PULL)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
                 TransportStrip(viewModel, isCompanion, companionLinked)
                 if (isCompanion && companionLinked && !isFresh) StaleStrip()
             }

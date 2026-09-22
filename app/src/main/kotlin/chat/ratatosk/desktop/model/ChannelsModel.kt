@@ -120,6 +120,25 @@ interface ChannelsApi {
     fun setSeeding(chatId: ByteArray, mode: FfiSeeding)
     fun setSharingLevel(chatId: ByteArray, level: FfiSharingLevel)
 
+    /**
+     * Тянем ли сейчас более раннюю историю канала (§7.4); по каналам.
+     *
+     * У команды нет ответа: блоки приедут обычной дорогой, а «глубже
+     * ничего нет» скажет событие — и только оно снимает полоску.
+     */
+    val historyPulling: StateFlow<Map<String, Boolean>>
+
+    /** Последняя просьба уткнулась в дно: у спрошенных глубже нет. */
+    val historyEnded: StateFlow<Map<String, Boolean>>
+
+    /**
+     * Просит более раннюю историю канала (§7.4).
+     *
+     * Вступление историю не тянет, и это решение: иначе подписавшийся
+     * оплачивал бы год чужой переписки, которого не просил.
+     */
+    fun pullOlderHistory(chatId: ByteArray)
+
     /** Перечитать всё канальное: заявки, впущенных, выдачи, раздачу. */
     fun loadChannel(chatId: ByteArray)
 }
@@ -161,8 +180,26 @@ class ChannelsModel(session: SessionContext) : FeatureModel(session), ChannelsAp
     private val _sharingLevel = MutableStateFlow<Map<String, FfiSharingLevel>>(emptyMap())
     override val sharingLevel = _sharingLevel.asStateFlow()
 
+    private val _historyPulling = MutableStateFlow<Map<String, Boolean>>(emptyMap())
+    override val historyPulling = _historyPulling.asStateFlow()
+
+    private val _historyEnded = MutableStateFlow<Map<String, Boolean>>(emptyMap())
+    override val historyEnded = _historyEnded.asStateFlow()
+
+    override fun pullOlderHistory(chatId: ByteArray) {
+        val hex = chatId.toHexString()
+        _historyPulling.update { it + (hex to true) }
+        _historyEnded.update { it - hex }
+        session.clientIo("Failed to pull older history") { it.pullOlderHistory(chatId) }
+    }
+
     override fun onEvent(event: AppEvent) {
         when (event) {
+            is AppEvent.ChannelHistoryEnd -> {
+                val hex = event.chatId.toHexString()
+                _historyPulling.update { it - hex }
+                _historyEnded.update { it + (hex to true) }
+            }
             is AppEvent.ChannelRequested -> loadChannel(event.chatId)
             is AppEvent.ChannelPeopleChanged -> loadChannel(event.chatId)
             is AppEvent.SeedingChanged -> loadChannel(event.chatId)
@@ -295,5 +332,7 @@ class ChannelsModel(session: SessionContext) : FeatureModel(session), ChannelsAp
         _seedingMode.value = emptyMap()
         _channelSeeds.value = emptyMap()
         _sharingLevel.value = emptyMap()
+        _historyPulling.value = emptyMap()
+        _historyEnded.value = emptyMap()
     }
 }

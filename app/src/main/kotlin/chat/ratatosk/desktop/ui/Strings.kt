@@ -607,6 +607,29 @@ object Strings {
         "Only verified — usually a handful, closer to not sharing at all",
     )
     val CHANNEL_RENAME = tr("Переименовать канал", "Rename the channel")
+    val CHANNEL_ADD_AUTHOR = tr("Добавить соавтора", "Add an author")
+    val CHANNEL_ADD_AUTHOR_DESC = tr(
+        "Выдать контакту право писать в этом канале. В открытом канале списка читателей нет — " +
+            "читает любой, у кого есть ссылка, — поэтому соавтора выбирают из контактов.",
+        "Give a contact the right to write in this channel. In an open channel there is no reader list — " +
+            "anyone with the link reads it — so an author is chosen from contacts.",
+    )
+    val CHANNEL_HISTORY_PULL = tr("Запросить раннее", "Ask for earlier posts")
+    val CHANNEL_HISTORY_PULLING = tr("Спрашиваем сидов о более раннем…", "Asking the seeds for earlier posts…")
+    val CHANNEL_HISTORY_END = tr(
+        "У тех, кого спросили, глубже ничего нет. Появится сид с более длинным архивом — стоит спросить снова.",
+        "Those we asked have nothing deeper. A seed with a longer archive may turn up — then it is worth asking again.",
+    )
+
+    val GIVING_LIMITS = tr("Пределы отдачи", "Limits on giving")
+    val GIVING_LIMITS_DESC = tr(
+        "Сколько блоков в минуту вы отдаёте: одному и всем вместе. Сервера здесь нет, " +
+            "значит ограничителя частоты нет ни у кого, кроме вас самих.",
+        "How many blocks a minute you give out: to one peer and to everyone together. There is no server here, " +
+            "so there is no rate limiter anywhere except in your own hands.",
+    )
+    val GIVING_LIMITS_PER_PEER = tr("Одному, в минуту", "To one peer, per minute")
+    val GIVING_LIMITS_TOTAL = tr("Всем, в минуту", "To everyone, per minute")
 
 
     // Переход по ссылке: её прислал собеседник, и подпись у неё любая.

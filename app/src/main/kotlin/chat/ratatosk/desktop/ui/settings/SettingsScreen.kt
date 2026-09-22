@@ -171,7 +171,11 @@ fun SettingsScreen(
                         Spacer(modifier = Modifier.height(24.dp))
                         HorizontalDivider()
                         Spacer(modifier = Modifier.height(24.dp))
-                        DiagnosticsSection(viewModel)
+                        GivingLimitsSection(viewModel)
+                        Spacer(Modifier.height(24.dp))
+                        GivingLimitsSection(viewModel)
+                    Spacer(Modifier.height(24.dp))
+                    DiagnosticsSection(viewModel)
                         HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
                         AccountSection(
                             viewModel = viewModel,
@@ -239,6 +243,8 @@ fun SettingsScreen(
                         chatTheme = chatTheme
                     )
                     HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
+                    GivingLimitsSection(viewModel)
+                    Spacer(Modifier.height(24.dp))
                     DiagnosticsSection(viewModel)
                     HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
                     AccountSection(
