@@ -75,7 +75,7 @@ class ClientBackend(val client: RatatoskClient) : Backend {
             is FfiEvent.ChannelKeyRotated,
             -> emit(AppEvent.ChatsChanged)
             is FfiEvent.ChannelAdmitted -> emit(AppEvent.ChannelPeopleChanged(event.chatId))
-            is FfiEvent.ChannelRequested -> emit(AppEvent.ChannelRequested(event.chatId))
+            is FfiEvent.ChannelRequested -> emit(AppEvent.ChannelRequested(event.chatId, event.who))
             is FfiEvent.SeedingChanged -> emit(AppEvent.SeedingChanged(event.chatId))
             is FfiEvent.SeedAnnounced -> emit(AppEvent.SeedingChanged(event.chatId))
             is FfiEvent.GroupMembershipChanged -> {

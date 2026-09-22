@@ -1,5 +1,6 @@
 package chat.ratatosk.desktop.ui.channels
 
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -7,6 +8,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -18,6 +20,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.toComposeImageBitmap
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import chat.ratatosk.desktop.backend.ChannelAdmit
@@ -26,6 +29,7 @@ import chat.ratatosk.desktop.ui.Strings
 import chat.ratatosk.desktop.ui.components.Avatar
 import chat.ratatosk.desktop.util.ClipboardUtils
 import chat.ratatosk.desktop.util.toHexString
+import qrcode.QRCode
 
 /**
  * Заведение канала.
@@ -188,8 +192,26 @@ fun ChannelLinkDialog(
                 when {
                     failed -> Text(Strings.CHANNEL_LINK_FAILED, color = MaterialTheme.colorScheme.error)
                     shown == null -> CircularProgressIndicator()
-                    else -> SelectionContainer {
-                        Text(shown, style = MaterialTheme.typography.bodySmall, fontFamily = FontFamily.Monospace)
+                    else -> Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        // Код — чтобы снять его телефоном: ссылка длинная,
+                        // руками её не переписывают.
+                        val code = remember(shown) {
+                            runCatching {
+                                (QRCode(shown).render().nativeImage() as java.awt.image.BufferedImage)
+                                    .toComposeImageBitmap()
+                            }.getOrNull()
+                        }
+                        if (code != null) {
+                            Image(
+                                bitmap = code,
+                                contentDescription = Strings.CHANNEL_LINK,
+                                modifier = Modifier.size(240.dp),
+                            )
+                            Spacer(Modifier.height(12.dp))
+                        }
+                        SelectionContainer {
+                            Text(shown, style = MaterialTheme.typography.bodySmall, fontFamily = FontFamily.Monospace)
+                        }
                     }
                 }
             }

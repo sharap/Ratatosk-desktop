@@ -48,8 +48,13 @@ sealed interface AppEvent {
     /** Заведённая нами группа появилась. */
     data class GroupCreated(val chatId: ByteArray) : AppEvent
 
-    /** Кто-то просится в канал (§10.4): заявка ждёт владельца. */
-    data class ChannelRequested(val chatId: ByteArray) : AppEvent
+    /**
+     * Кто-то просится в канал (§10.4): заявка ждёт владельца.
+     *
+     * Кто именно — нужно уведомлению, чтобы назвать имя; сама заявка
+     * лежит в `channel_requests` и переживает перезапуск.
+     */
+    data class ChannelRequested(val chatId: ByteArray, val who: ByteArray) : AppEvent
 
     /** Впустили кого-то: списки заявок и впущенных изменились. */
     data class ChannelPeopleChanged(val chatId: ByteArray) : AppEvent

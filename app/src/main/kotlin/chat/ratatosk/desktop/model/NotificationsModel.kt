@@ -121,6 +121,7 @@ class NotificationsModel(
             }
             is AppEvent.MessageArrived -> onMessage(event)
             is AppEvent.ReactionsChanged -> onReactions(event)
+            is AppEvent.ChannelRequested -> onChannelRequest(event)
             else -> {}
         }
     }
@@ -157,6 +158,53 @@ class NotificationsModel(
             if (count > 1) body = Strings.NOTIFY_MORE.format(body, count - 1)
 
             _requests.tryEmit(NotificationRequest(chatKey(hex), title, body, event.chatId, event.msgId))
+        }
+    }
+
+    /**
+     * Кто-то просится в канал по приглашению (§10.4).
+     *
+     * Сказать надо: заявка ждёт владельца сколько угодно, а отказа как
+     * ответа §10.4 не знает — не заметивший её молча отказывает, и
+     * просящий не узнает даже этого.
+     *
+     * Имя — по той же настройке, что и у сообщений: карточка просящего
+     * у нас уже есть, но выносить её в уведомление, когда человек просил
+     * имён не показывать, нельзя.
+     */
+    private fun onChannelRequest(event: AppEvent.ChannelRequested) {
+        val hex = event.chatId.toHexString()
+        if (isSeen(event.chatId)) return
+
+        scope.launch(Dispatchers.IO) {
+            val (showName, _) = privacy()
+            val body = if (showName) {
+                val client = session.client
+                val who = runCatching {
+                    client?.channelRequests(event.chatId)
+                        ?.firstOrNull { it.who.contentEquals(event.who) }?.name
+                }.getOrNull()
+                val title = groups.getGroup(event.chatId)?.title?.takeIf { it.isNotBlank() }
+                if (who != null && title != null) {
+                    Strings.CHANNEL_REQUEST_NOTIFY.format(who, title)
+                } else {
+                    Strings.CHANNEL_REQUEST_NOTIFY_PLAIN
+                }
+            } else {
+                Strings.CHANNEL_REQUEST_NOTIFY_PLAIN
+            }
+
+            // Один ключ на канал: вторая заявка заменяет уведомление,
+            // а не копится рядом с первым.
+            _requests.tryEmit(
+                NotificationRequest(
+                    key = "channel-request:$hex",
+                    title = Strings.CHANNEL_REQUEST_NOTIFY_TITLE,
+                    body = body,
+                    chatId = event.chatId,
+                    msgId = null,
+                )
+            )
         }
     }
 

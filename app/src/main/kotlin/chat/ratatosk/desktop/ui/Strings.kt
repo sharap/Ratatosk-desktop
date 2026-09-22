@@ -523,6 +523,9 @@ object Strings {
         "This link carries the reading key: anyone it reaches will read the channel.",
     )
 
+    val CHANNEL_REQUEST_NOTIFY_TITLE = tr("Просятся в канал", "Asking to join a channel")
+    val CHANNEL_REQUEST_NOTIFY = tr("%s просится в «%s»", "%s is asking to join “%s”")
+    val CHANNEL_REQUEST_NOTIFY_PLAIN = tr("Кто-то просится в канал", "Someone is asking to join a channel")
     val CHANNEL_REQUESTS = tr("Просятся внутрь", "Asking to be let in")
     val CHANNEL_REQUESTS_NONE = tr("Никто не просится", "No one is asking")
     val CHANNEL_NO_REFUSAL = tr("Отказа не отправить: отказ — это молчание.", "There is no refusal to send: staying silent is the refusal.")
