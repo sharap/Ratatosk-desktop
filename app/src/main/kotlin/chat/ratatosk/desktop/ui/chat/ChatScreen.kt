@@ -307,9 +307,26 @@ fun ChatScreen(
             }
         },
         bottomBar = {
-            if (group != null && !group.joined) {
+            // В канале поле ввода гасится правом, а не составом (§6.2):
+            // состоять и мочь говорить — разные вещи, и каждой причине
+            // свои слова.
+            val channelBlock = when (chat.ratatosk.desktop.model.channelInput(group)) {
+                chat.ratatosk.desktop.model.ChannelInput.ALLOWED -> null
+                chat.ratatosk.desktop.model.ChannelInput.NO_RIGHT -> Strings.CHANNEL_NO_WRITE_RIGHT
+                chat.ratatosk.desktop.model.ChannelInput.AWAITING -> Strings.CHANNEL_AWAITING
+                chat.ratatosk.desktop.model.ChannelInput.NOT_READABLE -> Strings.CHANNEL_NOT_READABLE
+            }
+            if (channelBlock != null) {
                 Surface(tonalElevation = 2.dp, modifier = Modifier.fillMaxWidth()) {
-                    Text(Strings.GROUP_YOU_LEFT, modifier = Modifier.padding(16.dp), color = MaterialTheme.colorScheme.outline)
+                    Text(channelBlock, modifier = Modifier.padding(16.dp), color = MaterialTheme.colorScheme.outline)
+                }
+            } else if (group != null && !group.joined) {
+                Surface(tonalElevation = 2.dp, modifier = Modifier.fillMaxWidth()) {
+                    Text(
+                        if (group.channel != null) Strings.CHANNEL_LEFT else Strings.GROUP_YOU_LEFT,
+                        modifier = Modifier.padding(16.dp),
+                        color = MaterialTheme.colorScheme.outline,
+                    )
                 }
             } else {
                 Composer(

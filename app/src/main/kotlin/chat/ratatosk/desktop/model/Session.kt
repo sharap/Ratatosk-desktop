@@ -85,13 +85,28 @@ class SessionContext(
                 throw e
             } catch (e: Exception) {
                 Log.w("Session", logLabel ?: "Backend call failed", e)
-                if (logLabel != null) _error.value = e.message?.takeIf { it.isNotBlank() } ?: Strings.CORE_CALL_FAILED
+                if (logLabel != null) _error.value = errorText(e)
             }
         }
 
     /** То же для возможностей полного клиента; в режиме компаньона — ничего. */
     internal fun clientIo(logLabel: String? = null, block: suspend CoroutineScope.(RatatoskClient) -> Unit): Job =
         io(logLabel) { b -> (b as? ClientBackend)?.let { block(it.client) } }
+
+    /**
+     * Слова к ошибке ядра.
+     *
+     * У отказа канала свой текст — и только он: `RatatoskException.Channel`
+     * несёт причину значением, а её `message` выглядит как `reason=NO_RIGHT`.
+     * Показать такое человеку нельзя, а писать свой текст к двенадцати
+     * причинам — тем более (§15).
+     */
+    internal fun errorText(e: Throwable): String = when {
+        e is org.ratatosk.core.RatatoskException.Channel ->
+            org.ratatosk.core.channelRefusalText(e.reason)
+        !e.message.isNullOrBlank() -> e.message!!
+        else -> Strings.CORE_CALL_FAILED
+    }
 
     override fun clearError() {
         _error.value = null

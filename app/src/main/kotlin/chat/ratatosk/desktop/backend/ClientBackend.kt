@@ -66,6 +66,18 @@ class ClientBackend(val client: RatatoskClient) : Backend {
                 emit(AppEvent.GroupCreated(event.chatId))
             }
             is FfiEvent.GroupRenamed -> emit(AppEvent.ChatsChanged)
+            // Канальные события меняют представление или наши права, а то
+            // и другое приезжает внутри группы — ответ один: перечитать.
+            is FfiEvent.ChannelCreated,
+            is FfiEvent.ChannelChanged,
+            is FfiEvent.ChannelSubscribed,
+            is FfiEvent.ChannelUnsubscribed,
+            is FfiEvent.ChannelKeyRotated,
+            -> emit(AppEvent.ChatsChanged)
+            is FfiEvent.ChannelAdmitted -> emit(AppEvent.ChannelPeopleChanged(event.chatId))
+            is FfiEvent.ChannelRequested -> emit(AppEvent.ChannelRequested(event.chatId))
+            is FfiEvent.SeedingChanged -> emit(AppEvent.SeedingChanged(event.chatId))
+            is FfiEvent.SeedAnnounced -> emit(AppEvent.SeedingChanged(event.chatId))
             is FfiEvent.GroupMembershipChanged -> {
                 emit(AppEvent.ChatsChanged)
                 emit(AppEvent.GroupChanged(event.chatId))
@@ -122,6 +134,24 @@ class ClientBackend(val client: RatatoskClient) : Backend {
         canManage = mine && joined,
         avatarMs = avatarMs,
         createdMs = createdMs,
+        channel = channel?.let { ch ->
+            Channel(
+                open = ch.open,
+                mine = mine,
+                // Спрашиваем право, а не состав: в канале состоять и мочь
+                // говорить — разные вещи (§6.2). `rights` ядро считает
+                // с учётом срока и правила «владельцу всё».
+                canWrite = mine || ch.rights.write,
+                canAdmit = mine || ch.rights.admit,
+                rightsUntilMs = ch.rightsUntilMs,
+                powBits = ch.powBits,
+                awaiting = ch.awaiting,
+                readable = ch.readable,
+                mayRotate = ch.mayRotate,
+                ownerUnseen = ch.ownerUnseen,
+                grantsExpiring = ch.grantsExpiring,
+            )
+        },
     )
 
     override fun requestAvatar(chatId: ByteArray?) {

@@ -4,6 +4,7 @@ import chat.ratatosk.desktop.data.SettingsRepository
 import chat.ratatosk.desktop.model.AccountsApi
 import chat.ratatosk.desktop.model.AppModels
 import chat.ratatosk.desktop.model.BackupApi
+import chat.ratatosk.desktop.model.ChannelsApi
 import chat.ratatosk.desktop.model.ChatsApi
 import chat.ratatosk.desktop.model.ContactsApi
 import chat.ratatosk.desktop.model.FilesApi
@@ -42,7 +43,8 @@ class RatatoskViewModel private constructor(
     PairingApi by models.pairing,
     NotificationsApi by models.notifications,
     TransportsApi by models.transports,
-    PreferencesApi by models.preferences {
+    PreferencesApi by models.preferences,
+    ChannelsApi by models.channels {
 
     constructor(
         settingsRepository: SettingsRepository,

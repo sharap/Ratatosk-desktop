@@ -48,6 +48,15 @@ sealed interface AppEvent {
     /** Заведённая нами группа появилась. */
     data class GroupCreated(val chatId: ByteArray) : AppEvent
 
+    /** Кто-то просится в канал (§10.4): заявка ждёт владельца. */
+    data class ChannelRequested(val chatId: ByteArray) : AppEvent
+
+    /** Впустили кого-то: списки заявок и впущенных изменились. */
+    data class ChannelPeopleChanged(val chatId: ByteArray) : AppEvent
+
+    /** Раздача канала изменилась: наша или чья-то (§7.5). */
+    data class SeedingChanged(val chatId: ByteArray) : AppEvent
+
     // --- Переписка --------------------------------------------------------
     /** Последние сообщения чата — заменяют показанные. */
     data class HistoryLoaded(val chatId: ByteArray, val messages: List<FfiMessage>, val fresh: Boolean) : AppEvent

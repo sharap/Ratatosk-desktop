@@ -14,6 +14,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.History
+import androidx.compose.material.icons.filled.Campaign
 import androidx.compose.material.icons.filled.Groups
 import androidx.compose.material.icons.filled.PersonAdd
 import androidx.compose.material.icons.filled.Search
@@ -211,6 +212,10 @@ private fun ChatRow(
     var menuOpen by remember { mutableStateOf(false) }
     val last = item.lastMessage
     val isGroup = item is ChatItem.GroupChat
+    val channel = (item as? ChatItem.GroupChat)?.group?.channel
+    // Названия у канала нет, пока не приехало представление: в ссылке его
+    // подписать нечем (§10.5). Честная строка вместо пустого места.
+    val shownTitle = item.title.ifBlank { if (channel != null) Strings.CHANNEL_NO_TITLE_YET else "" }
 
     Box(
         Modifier
@@ -223,7 +228,15 @@ private fun ChatRow(
             colors = ListItemDefaults.colors(containerColor = Color.Transparent),
             headlineContent = {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(item.title, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
+                    if (channel != null) {
+                        Icon(
+                            Icons.Default.Campaign,
+                            contentDescription = Strings.CHANNEL,
+                            modifier = Modifier.size(16.dp).padding(end = 4.dp),
+                            tint = MaterialTheme.colorScheme.primary,
+                        )
+                    }
+                    Text(shownTitle, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
                     if (item is ChatItem.GroupChat && !item.group.joined) {
                         Spacer(Modifier.width(6.dp))
                         Text(Strings.GROUP_LEFT_BADGE, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline)
@@ -258,11 +271,15 @@ private fun ChatRow(
                 if (isGroup && avatar == null) {
                     Surface(modifier = Modifier.size(40.dp), shape = CircleShape, color = MaterialTheme.colorScheme.tertiaryContainer) {
                         Box(contentAlignment = Alignment.Center) {
-                            Icon(Icons.Default.Groups, null, tint = MaterialTheme.colorScheme.onTertiaryContainer)
+                            Icon(
+                                if (channel != null) Icons.Default.Campaign else Icons.Default.Groups,
+                                null,
+                                tint = MaterialTheme.colorScheme.onTertiaryContainer,
+                            )
                         }
                     }
                 } else {
-                    Avatar(avatarBytes = avatar, name = item.title)
+                    Avatar(avatarBytes = avatar, name = shownTitle)
                 }
             },
             trailingContent = { if (unread > 0) Badge { Text(unread.toString()) } },

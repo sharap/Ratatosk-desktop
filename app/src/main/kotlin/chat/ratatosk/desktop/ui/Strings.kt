@@ -472,6 +472,139 @@ object Strings {
     val AVATAR_CHANGE = tr("Сменить картинку", "Change picture")
     val AVATAR_REMOVE = tr("Удалить фото", "Remove photo")
 
+    // --- Каналы (фаза 2, §6, §10) ----------------------------------------
+    val CHANNEL = tr("Канал", "Channel")
+    val CHANNEL_NO_TITLE_YET = tr(
+        "Канал — его представление ещё не приехало",
+        "Channel — its description has not arrived yet",
+    )
+    val CHANNEL_NO_WRITE_RIGHT = tr("Права писать в этом канале нет", "You have no right to write in this channel")
+    val CHANNEL_AWAITING = tr("Ждём, пока владелец впустит", "Waiting for the owner to let you in")
+    val CHANNEL_NOT_READABLE = tr("Читать пока нечем: ключ ещё не приехал", "Nothing to read it with yet: the key has not arrived")
+    val CHANNEL_LEFT = tr("Вы больше не читаете этот канал", "You are not reading this channel any more")
+    val CHANNEL_DETAILS = tr("О канале", "Channel")
+    val CHANNEL_READERS = tr("Читатели", "Readers")
+    val CHANNEL_READERS_COUNT = tr("Читателей: %d", "%d readers")
+    val CHANNEL_OPEN_SHORT = tr("Открытый канал", "Open channel")
+    val CHANNEL_PRIVATE_SHORT = tr("Канал по приглашению", "Channel by invitation")
+    val CHANNEL_KIND = tr("Порода", "Kind")
+    val CHANNEL_KIND_OPEN = tr("Открытый: читает любой, кому дали ссылку", "Open: anyone with the link reads it")
+    val CHANNEL_KIND_PRIVATE = tr("По приглашению: читателей впускаете вы", "By invitation: you let readers in")
+    val CHANNEL_KIND_UNKNOWN = tr(
+        "Пока неизвестна: представление канала ещё не приехало",
+        "Not known yet: the channel description has not arrived",
+    )
+
+    val CHANNEL_CREATE = tr("Создать канал", "Create a channel")
+    val CHANNEL_TITLE_HINT = tr("Название канала", "Channel name")
+    val CHANNEL_SUBSCRIBE = tr("Подписаться на канал", "Subscribe to a channel")
+    val CHANNEL_SUBSCRIBE_HINT = tr("Ссылка на канал", "Channel link")
+    val CHANNEL_SUBSCRIBE_ACTION = tr("Подписаться", "Subscribe")
+    val CHANNEL_SUBSCRIBE_OPEN_IF = tr("Если ссылка на открытый канал:", "If the link is to an open channel:")
+    val CHANNEL_SUBSCRIBE_PRIVATE_IF = tr("Если ссылка по приглашению:", "If the link is by invitation:")
+    val CHANNEL_UNSUBSCRIBE = tr("Отписаться", "Unsubscribe")
+    val CHANNEL_UNSUBSCRIBE_WARNING = tr(
+        "Вместе с чатом уйдёт и архив: ключи чтения хранятся здесь и больше нигде. " +
+            "Вернувшись по той же ссылке, вы прочтёте только то, что приедет заново.",
+        "The chat and its archive go with it: the reading keys are kept here and nowhere else. " +
+            "Coming back by the same link, you will only read what arrives anew.",
+    )
+    val CHANNEL_OWNER_STAYS = tr(
+        "Из своего канала не уходят: отписываться не от кого.",
+        "A channel of your own cannot be left: there is nobody to unsubscribe from.",
+    )
+
+    val CHANNEL_LINK = tr("Ссылка на канал", "Channel link")
+    val CHANNEL_LINK_SHOW = tr("Показать ссылку", "Show the link")
+    val CHANNEL_LINK_FAILED = tr("Не удалось собрать ссылку", "Could not build the link")
+    val CHANNEL_LINK_OPEN_WARNING = tr(
+        "В этой ссылке ключ чтения: любой, к кому она попадёт, будет читать канал.",
+        "This link carries the reading key: anyone it reaches will read the channel.",
+    )
+
+    val CHANNEL_REQUESTS = tr("Просятся внутрь", "Asking to be let in")
+    val CHANNEL_REQUESTS_NONE = tr("Никто не просится", "No one is asking")
+    val CHANNEL_NO_REFUSAL = tr("Отказа не отправить: отказ — это молчание.", "There is no refusal to send: staying silent is the refusal.")
+    val CHANNEL_ADMIT = tr("Впустить", "Let in")
+    val CHANNEL_ADMITTED = tr("Впущенные читатели", "Readers you let in")
+    val CHANNEL_ADMITTED_NONE = tr("Пока никого", "No one yet")
+    val CHANNEL_ADMITTED_BY = tr("впустил %s", "let in by %s")
+    val CHANNEL_ADMIT_CONTACT = tr("Впустить контакт", "Let a contact in")
+    val CHANNEL_ADMIT_CONTACT_DESC = tr(
+        "Ключ чтения уедет ему без всякой ссылки: он запечатывается на его карточку, " +
+            "поэтому впустить так можно только контакт.",
+        "They will get the reading key without any link: it is sealed to their card, " +
+            "so only a contact can be let in this way.",
+    )
+    val CHANNEL_ADMIT_NONE_LEFT = tr("Все ваши контакты уже впущены", "Everyone in your contacts has been let in already")
+
+    val CHANNEL_GRANTS = tr("Выданные права", "Rights given out")
+    val CHANNEL_GRANTS_NONE = tr("Никому ничего не выдано", "Nobody has been given anything")
+    val CHANNEL_GRANT_EDIT = tr("Права", "Rights")
+    val CHANNEL_RIGHT_WRITE = tr("Писать", "Write")
+    val CHANNEL_RIGHT_ADMIT = tr("Впускать читателей", "Let readers in")
+    val CHANNEL_RIGHT_EVICT = tr("Исключать", "Evict")
+    val CHANNEL_RIGHT_EDIT = tr("Править представление", "Edit the description")
+    val CHANNEL_RIGHT_NONE = tr("Ничего: право снимается", "Nothing: the right is taken away")
+    val CHANNEL_RIGHT_TERM = tr("На какой срок", "For how long")
+    val CHANNEL_RIGHT_TERM_MONTH = tr("Месяц", "A month")
+    val CHANNEL_RIGHT_TERM_QUARTER = tr("Три месяца", "Three months")
+    val CHANNEL_RIGHT_TERM_YEAR = tr("Год", "A year")
+    val CHANNEL_RIGHT_TERM_REQUIRED = tr(
+        "Срок обязателен: непродлённое право истекает само, а право без срока означало бы отзыв — в рое он не работает.",
+        "A term is required: an unrenewed right expires by itself, and a right without a term would mean revocation — which does not work in a swarm.",
+    )
+    val CHANNEL_RIGHT_UNTIL = tr("до %s", "until %s")
+    val CHANNEL_RIGHT_EXPIRED = tr("истекло", "expired")
+    val CHANNEL_GRANTS_EXPIRING = tr(
+        "Истекают в течение месяца: %d. Продлите, пока не поздно.",
+        "Rights running out within a month: %d. Renew them before they lapse.",
+    )
+    val CHANNEL_MY_RIGHT_UNTIL = tr("Ваше право писать — до %s", "Your right to write lasts until %s")
+    val CHANNEL_OWNER_QUIET = tr("От владельца давно ничего не приходило", "Nothing has come from the owner for a long time")
+
+    val CHANNEL_ROTATE = tr("Повернуть ключ чтения", "Rotate the reading key")
+    val CHANNEL_POW_TITLE = tr("Цена слова", "Price of a word")
+    val CHANNEL_POW_CURRENT = tr("Сейчас: %d бит", "Now: %d bits")
+    val CHANNEL_POW_FREE = tr("Сейчас: работа не требуется", "Now: no work required")
+    val CHANNEL_POW_HINT = tr("Бит", "Bits")
+    val CHANNEL_POW_EXPLAIN = tr(
+        "Работа поднимает пол против тривиального флуда; против видеокарты не работает, " +
+            "телефон наказывает всерьёз (§11). Это фильтр первого уровня, а не защита.",
+        "Proof of work raises the floor against trivial flooding; it does not work against a graphics card " +
+            "and punishes a phone in earnest (§11). It is a first-level filter, not a defence.",
+    )
+
+    val CHANNEL_SEEDING = tr("Раздача канала", "Sharing the channel")
+    val CHANNEL_SEEDING_OFF = tr("Не раздаём: никому", "Not sharing: to nobody")
+    val CHANNEL_SEEDING_OFF_DESC = tr(
+        "Канал читается по-прежнему — выключается раздача, а не подписка.",
+        "The channel still reads as before — what stops is the giving, not the subscription.",
+    )
+    val CHANNEL_SEEDING_QUIET = tr("Тихо (умолчание)", "Quietly (default)")
+    val CHANNEL_SEEDING_QUIET_DESC = tr(
+        "Адрес не объявлен, набрать вас нельзя, но тем, к кому подключились сами, отдаёте наравне со всеми.",
+        "The address is not announced and nobody can dial you, but to those you connected to yourself you give like everyone else.",
+    )
+    val CHANNEL_SEEDING_ANNOUNCED = tr("Объявленный сид", "Announced seed")
+    val CHANNEL_SEEDING_ANNOUNCED_DESC = tr(
+        "Адрес уходит в каталог, набирают незнакомые, отдаёте всякому, кто спросил.",
+        "The address goes into the catalogue, strangers dial it, and you give to whoever asks.",
+    )
+    val CHANNEL_SEEDS = tr("Кто ещё раздаёт", "Who else is sharing")
+    val CHANNEL_SEEDS_NONE = tr("Никто не объявлялся", "Nobody has announced themselves")
+    val CHANNEL_SEED_UNTIL = tr("объявлен до %s", "announced until %s")
+    val CHANNEL_SEED_UNVERIFIED = tr("карточку проверить было нечем", "the card could not be checked")
+    val CHANNEL_SHARING_LEVEL = tr("Кому отдавать", "Whom to give to")
+    val CHANNEL_SHARING_EVERYONE = tr("Всем, кто спросил (умолчание)", "Everyone who asks (default)")
+    val CHANNEL_SHARING_CONTACTS = tr("Только контактам", "Only contacts")
+    val CHANNEL_SHARING_VERIFIED = tr(
+        "Только сверенным — их обычно единицы, это ближе к «не раздавать»",
+        "Only verified — usually a handful, closer to not sharing at all",
+    )
+    val CHANNEL_RENAME = tr("Переименовать канал", "Rename the channel")
+
+
     // Переход по ссылке: её прислал собеседник, и подпись у неё любая.
     val LINK_OPEN_TITLE = tr("Перейти по ссылке?", "Open this link?")
     val LINK_LEADS_TO = tr("Ведёт на", "Leads to")
