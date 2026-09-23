@@ -44,6 +44,14 @@ class ChannelNotices(
     val seeding: String,
     /** До сужения круга отдачи (§12): платит не только тот, кто настраивал. */
     val sharingLevel: String,
+    /**
+     * Метка «до владельца канала не доехало» (§15).
+     *
+     * `false` у `FfiMessage::in_the_channel` значит ровно это — не
+     * «удалили» (удаления у канала нет вовсе) и не «подделка» (подпись
+     * проверена, иначе сообщение не показалось бы).
+     */
+    val messageNotInTheChannel: String,
 )
 
 /** Почему в канале закрыто поле ввода. */
@@ -169,6 +177,7 @@ class ChannelsModel(session: SessionContext) : FeatureModel(session), ChannelsAp
         sharing = sharingNotice(),
         seeding = seedingNotice(),
         sharingLevel = sharingLevelNotice(),
+        messageNotInTheChannel = org.ratatosk.core.messageNotInTheChannelText(),
     )
 
     override fun channelSignalText(signal: org.ratatosk.core.FfiChannelSignal): String =

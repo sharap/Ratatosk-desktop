@@ -458,6 +458,7 @@ fun ChatScreen(
                             repliedMessages = repliedMessages,
                             authorName = ::authorName,
                             waitingNotice = notices.waiting,
+                            notInTheChannelNotice = viewModel.channelNotices.messageNotInTheChannel,
                             onJump = ::jumpTo,
                             onSaved = { path ->
                                 scope.launch {
@@ -562,6 +563,8 @@ private fun MessageItem(
     repliedMessages: Map<String, FfiMessage?>,
     authorName: (FfiMessage) -> String,
     waitingNotice: String,
+    /** Слова ядра к метке «в канал не доехало» (§15). */
+    notInTheChannelNotice: String,
     onJump: (ByteArray) -> Unit,
     onSaved: (String) -> Unit,
     actions: MessageActions,
@@ -586,6 +589,7 @@ private fun MessageItem(
         replyAuthor = reply?.let(authorName),
         onReplyClick = replyId?.let { id -> { onJump(id) } },
         waitingNotice = waitingNotice,
+        notInTheChannelNotice = notInTheChannelNotice,
         actions = actions,
         sharedActions = sharedActions,
         attachments = { _, _ ->

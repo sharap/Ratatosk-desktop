@@ -11,6 +11,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccountCircle
+import androidx.compose.material.icons.filled.CloudOff
 import androidx.compose.material.icons.filled.PersonAdd
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.automirrored.filled.Reply
@@ -81,6 +82,8 @@ fun MessageRow(
     replyAuthor: String?,
     onReplyClick: (() -> Unit)?,
     waitingNotice: String,
+    /** Слова ядра к метке «в канал не доехало» (§15). */
+    notInTheChannelNotice: String = "",
     actions: MessageActions,
     sharedActions: SharedCardActions,
     attachments: @Composable (contentColor: Color, accent: Color) -> Unit,
@@ -167,7 +170,7 @@ fun MessageRow(
                         if (raw.body.isNotBlank()) {
                             MessageText(raw.body, contentColor, accent, expanded, onToggleExpanded, revealedSpoilers, onRevealSpoiler)
                         }
-                        MetaLine(raw, message.status, contentColor, waitingNotice, actions.onRetry)
+                        MetaLine(raw, message.status, contentColor, waitingNotice, notInTheChannelNotice, actions.onRetry)
                     }
                 }
 
@@ -365,7 +368,15 @@ private fun withSpoilers(base: AnnotatedString, revealed: Set<Int>, contentColor
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun MetaLine(raw: FfiMessage, status: FfiDeliveryStatus?, contentColor: Color, waitingNotice: String, onRetry: (() -> Unit)?) {
+private fun MetaLine(
+    raw: FfiMessage,
+    status: FfiDeliveryStatus?,
+    contentColor: Color,
+    waitingNotice: String,
+    /** Слова ядра к метке «в канал не доехало»; пусто — метки не рисуем. */
+    notInTheChannelNotice: String,
+    onRetry: (() -> Unit)?,
+) {
     Row(
         modifier = Modifier.padding(top = 2.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -380,6 +391,27 @@ private fun MetaLine(raw: FfiMessage, status: FfiDeliveryStatus?, contentColor: 
             style = MaterialTheme.typography.labelSmall,
             color = contentColor.copy(alpha = 0.7f),
         )
+        // В канале «ушло» и «лежит в канале» — разные вещи: слово
+        // держателя права уезжает владельцу, тот развозит по составу,
+        // и пока это не случилось, пришедший завтра сказанного не увидит.
+        if (raw.inTheChannel == false && notInTheChannelNotice.isNotBlank()) {
+            TooltipArea(tooltip = {
+                Surface(shape = RoundedCornerShape(6.dp), tonalElevation = 4.dp, shadowElevation = 2.dp) {
+                    Text(
+                        notInTheChannelNotice,
+                        style = MaterialTheme.typography.bodySmall,
+                        modifier = Modifier.padding(8.dp).widthIn(max = 320.dp),
+                    )
+                }
+            }) {
+                Icon(
+                    Icons.Default.CloudOff,
+                    contentDescription = notInTheChannelNotice,
+                    modifier = Modifier.size(14.dp),
+                    tint = MaterialTheme.colorScheme.error,
+                )
+            }
+        }
         if (raw.mine && status != null) {
             val (icon, label) = statusIcon(status)
             val tint = when (status) {
