@@ -106,9 +106,15 @@ fun VoiceBubble(
 
     fun start(fromMs: Long) {
         withFile { path ->
-            positionMs = fromMs
+            // Доигравшую запись начинаем сначала: иначе «слушать» ведёт
+            // в самый конец и не играет ничего.
+            val from = if (fromMs >= durationMs - 200) 0 else fromMs
+            positionMs = from
             playing = true
-            player.play(path, fromMs) { playing = false }
+            player.play(path, from) { completed ->
+                playing = false
+                if (completed) positionMs = 0
+            }
         }
     }
 

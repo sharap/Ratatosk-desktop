@@ -57,13 +57,16 @@ class VoicePlayer(private val scope: CoroutineScope) {
     /**
      * Играет [file], начиная с [fromMs].
      *
-     * @param onFinished позвать, когда запись доиграла или остановлена, —
-     *   экран по этому гасит кнопку.
+     * @param onFinished конец проигрывания; `true` — запись доиграла
+     *   до конца, `false` — её остановили. Разница не косметическая:
+     *   доигравшую надо начинать сначала, а остановленную — с места,
+     *   где бросили. Свалив их в одно, получаем кнопку «слушать»,
+     *   которая после конца записи не делает ничего.
      */
-    fun play(file: File, fromMs: Long, onFinished: () -> Unit) {
+    fun play(file: File, fromMs: Long, onFinished: (completed: Boolean) -> Unit) {
         stop()
         if (!available || !VoiceFile.looksLikeOgg(file)) {
-            onFinished()
+            onFinished(false)
             return
         }
 
@@ -72,6 +75,7 @@ class VoicePlayer(private val scope: CoroutineScope) {
         job = scope.launch(Dispatchers.IO) {
             val started = fromMs
             var played = 0L
+            var reachedEnd = false
             try {
                 // Просим у ffmpeg сырой поток: с ним JavaSound умеет всё,
                 // а разбирать Ogg самим было бы нечем.
@@ -97,7 +101,11 @@ class VoicePlayer(private val scope: CoroutineScope) {
                 built.inputStream.use { input ->
                     while (isActive) {
                         val read = input.read(buffer)
-                        if (read <= 0) break
+                        if (read <= 0) {
+                            // Поток кончился сам — значит запись доиграла.
+                            reachedEnd = true
+                            break
+                        }
                         out.write(buffer, 0, read)
                         // Две байты на кадр, кадров в секунде — RATE.
                         played += read / 2
@@ -110,7 +118,7 @@ class VoicePlayer(private val scope: CoroutineScope) {
             } finally {
                 closeAudio()
                 isPlaying = false
-                onFinished()
+                onFinished(reachedEnd && isActive)
             }
         }
     }
