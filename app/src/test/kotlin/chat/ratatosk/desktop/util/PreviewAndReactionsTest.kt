@@ -17,7 +17,7 @@ class PreviewAndReactionsTest {
         msgId = byteArrayOf(9), body = body, mine = mine, author = null, authorIk = null, wallMs = 0uL, status = null,
         editedAtMs = null, forwarded = false, reactions = reactions,
         files = files.map { FfiFile(fileId = ByteArray(16), name = it, sizeBytes = 1uL, incoming = true, accepted = true, complete = true, receivedChunks = 1uL, chunkTotal = 1uL, hasPreview = false, chunkBytes = 0u) },
-        replyTo = null, sharedContact = null,
+        replyTo = null, sharedContact = null, inTheChannel = null,
     )
 
     @Test

@@ -76,7 +76,10 @@ internal fun mapCompanionMessage(msg: FfiCompanionMessage): FfiMessage {
         },
         // Сопоставление подписи автора с участником группы — этап 3.
         author = msg.author,
-        authorIk = null
+        authorIk = null,
+        // Доехало ли слово до владельца канала, второй экран не знает:
+        // у него нет ни канальных документов, ни состава (§3.2).
+        inTheChannel = null
     )
 }
 
@@ -97,8 +100,24 @@ internal fun mapCompanionAttachment(att: FfiCompanionAttachment, mine: Boolean):
     )
 }
 
-/** Превью исходящей картинки в пределах, которые задаёт ядро; не картинка — `null`. */
+/**
+ * Волны записей, снятые при записи, по пути файла.
+ *
+ * Превью ядро просит в момент отправки, а декодировать Opus ради
+ * картинки нечем: громкость известна только записи. Поэтому она кладёт
+ * готовую волну сюда, а [previewFor] её оттуда берёт.
+ */
+private val recordedWaveforms = java.util.concurrent.ConcurrentHashMap<String, ByteArray>()
+
+/** Запомнить волну записи до отправки. */
+internal fun rememberVoiceWaveform(path: String, png: ByteArray) {
+    recordedWaveforms[path] = png
+}
+
+/** Превью исходящего вложения в пределах, которые задаёт ядро; нечего — `null`. */
 internal fun previewFor(file: File): ByteArray? {
+    // Голосовое: волна уже нарисована записью.
+    recordedWaveforms.remove(file.absolutePath)?.let { return it }
     if (file.extension.lowercase() !in listOf("jpg", "jpeg", "png", "webp", "gif", "bmp")) return null
     val limit = try { maxPreviewBytes().toInt() } catch (e: Exception) { return null }
     return ImageUtils.makePreview(file, limit)

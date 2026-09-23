@@ -62,6 +62,8 @@ fun Composer(
     onSend: () -> Unit,
     onEditLast: () -> Boolean,
     focusRequester: FocusRequester,
+    /** Запись голосового; `null` — в этом чате её нет (второй экран). */
+    voice: VoiceRecordingState? = null,
 ) {
     val canSend = value.text.isNotBlank() || attachments.isNotEmpty()
 
@@ -95,6 +97,13 @@ fun Composer(
                 ) {
                     attachments.forEach { file -> AttachmentThumb(file, onRemove = { onRemoveAttachment(file) }) }
                 }
+            }
+
+            // Идёт запись — поле ввода ни к чему: человек говорит,
+            // а не пишет, и всё, что ему нужно, — время и две кнопки.
+            if (voice != null && voice.isRecording) {
+                VoiceRecordingRow(voice)
+                return@Column
             }
 
             Row(Modifier.fillMaxWidth().padding(8.dp), verticalAlignment = Alignment.Bottom) {
@@ -133,6 +142,15 @@ fun Composer(
                     maxLines = 8,
                 )
                 Spacer(Modifier.width(4.dp))
+                // Пустое поле — значит человек может сказать голосом.
+                // Кнопка своя, а не удержание «отправить»: держать мышь
+                // полминуты неудобно, и промах стоил бы записи.
+                if (voice != null && !canSend) {
+                    IconButton(onClick = { voice.begin() }) {
+                        Icon(Icons.Default.Mic, Strings.VOICE_RECORD)
+                    }
+                    Spacer(Modifier.width(4.dp))
+                }
                 FilledIconButton(onClick = onSend, enabled = canSend) {
                     if (banner is ComposerBanner.Edit) Icon(Icons.Default.Check, Strings.SAVE)
                     else Icon(Icons.AutoMirrored.Filled.Send, Strings.SEND)

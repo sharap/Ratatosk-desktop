@@ -354,7 +354,7 @@ class ModelsWithFakeBackendTest {
         fun message(msgId: ByteArray) = FfiMessage(
             msgId = msgId, body = "x", mine = false, wallMs = 0UL, status = FfiDeliveryStatus.DELIVERED,
             editedAtMs = null, forwarded = false, reactions = emptyList(), files = emptyList(), replyTo = null,
-            sharedContact = null, author = null, authorIk = null,
+            sharedContact = null, author = null, authorIk = null, inTheChannel = null,
         )
 
         fun waitUntil(timeoutMs: Long = 2000, condition: () -> Boolean) {

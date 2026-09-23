@@ -71,6 +71,14 @@ fun ChatScreen(
     val chatHex = remember(chatId) { chatId.toHexString() }
     val scope = rememberCoroutineScope()
     val snackbar = remember { SnackbarHostState() }
+
+    // Голосовое: запись живёт на экране, а не в композере, — иначе она
+    // обрывалась бы при каждой его перерисовке.
+    val voiceRecording = rememberVoiceRecording(
+        chatId = chatId,
+        onSend = { file, waveform -> viewModel.sendVoice(chatId, file, waveform) },
+        onError = { message -> scope.launch { snackbar.showSnackbar(message) } },
+    )
     val listState = rememberLazyListState()
     val composerFocus = remember { FocusRequester() }
 
@@ -364,6 +372,8 @@ fun ChatScreen(
                 if (isCompanion && companionLinked && !isFresh) StaleStrip()
             }
         },
+        // Запись голосового держит экран: жест и полоса — в композере,
+        // микрофон и отправка — здесь.
         bottomBar = {
             // В канале поле ввода гасится правом, а не составом (§6.2):
             // состоять и мочь говорить — разные вещи, и каждой причине
@@ -392,6 +402,7 @@ fun ChatScreen(
                 }
             } else {
                 Composer(
+                    voice = if (isCompanion) null else voiceRecording,
                     value = text,
                     onValueChange = { text = it },
                     banner = editing?.let { ComposerBanner.Edit(notices.edit) }

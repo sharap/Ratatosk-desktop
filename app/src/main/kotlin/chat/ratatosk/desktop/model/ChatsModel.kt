@@ -42,6 +42,14 @@ interface ChatsApi {
     fun clearSearch()
     fun sendText(chatId: ByteArray, text: String)
     fun sendFiles(chatId: ByteArray, files: List<File>, text: String)
+
+    /**
+     * Отправляет записанное голосовое.
+     *
+     * Волна кладётся в превью до отправки: ядро просит его в момент
+     * отправки, а после — неоткуда взять, декодировать Opus нечем.
+     */
+    fun sendVoice(chatId: ByteArray, file: File, waveform: ByteArray?)
     /**
      * Недоставленное (`UNDELIVERABLE`) текстовое — отправить заново: прежнее
      * удаляется у себя, тот же текст уходит с той же цитатой. Повтора в ядре
@@ -158,6 +166,11 @@ class ChatsModel(session: SessionContext) : FeatureModel(session), ChatsApi {
 
     override fun sendText(chatId: ByteArray, text: String) {
         session.io("Failed to send") { it.sendText(chatId, text) }
+    }
+
+    override fun sendVoice(chatId: ByteArray, file: File, waveform: ByteArray?) {
+        if (waveform != null) chat.ratatosk.desktop.backend.rememberVoiceWaveform(file.absolutePath, waveform)
+        sendFiles(chatId, listOf(file), "")
     }
 
     override fun sendFiles(chatId: ByteArray, files: List<File>, text: String) {

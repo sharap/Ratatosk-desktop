@@ -20,7 +20,7 @@ class ChatViewTest {
     private fun message(id: Int, mine: Boolean = false, authorIk: ByteArray? = null, author: String? = null, reactions: List<FfiReaction> = emptyList()) = FfiMessage(
         msgId = byteArrayOf(id.toByte()), body = "x", mine = mine, author = author, authorIk = authorIk, wallMs = 0uL,
         status = FfiDeliveryStatus.SENT, editedAtMs = null, forwarded = false, reactions = reactions, files = emptyList(),
-        replyTo = null, sharedContact = null,
+        replyTo = null, sharedContact = null, inTheChannel = null,
     )
 
     private val alice = FfiContact(

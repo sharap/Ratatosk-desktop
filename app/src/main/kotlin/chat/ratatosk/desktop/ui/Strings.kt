@@ -634,6 +634,22 @@ object Strings {
     val VOICE_MESSAGE = tr("Голосовое", "Voice message")
     val VOICE_PLAY = tr("Слушать", "Play")
     val VOICE_PAUSE = tr("Пауза", "Pause")
+    val VOICE_RECORD = tr("Записать голосовое", "Record a voice message")
+    val VOICE_RECORDING = tr("Запись… %s", "Recording… %s")
+    val VOICE_SEND = tr("Отправить", "Send")
+    val VOICE_DISCARD = tr("Не отправлять", "Discard")
+    val VOICE_TOO_SHORT = tr(
+        "Слишком коротко — записать ничего не успели",
+        "Too short — nothing was recorded",
+    )
+    val VOICE_NO_MIC = tr(
+        "Микрофон занят или его нет — записать не получилось",
+        "The microphone is busy or missing — nothing could be recorded",
+    )
+    val VOICE_NO_RECORDER = tr(
+        "Записывать нечем: нужен ffmpeg в системе",
+        "Nothing to record with: ffmpeg is needed",
+    )
     val VOICE_NO_PLAYER = tr(
         "Слушать нечем: нужен ffmpeg в системе. Запись можно сохранить и открыть чем угодно.",
         "Nothing to play it with: ffmpeg is needed. The recording can be saved and opened elsewhere.",

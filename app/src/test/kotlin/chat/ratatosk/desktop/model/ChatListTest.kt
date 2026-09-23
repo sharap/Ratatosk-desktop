@@ -24,7 +24,7 @@ class ChatListTest {
 
     private fun message(wallMs: ULong) = FfiMessage(
         msgId = byteArrayOf(1), body = "x", mine = false, author = null, authorIk = null, wallMs = wallMs, status = null,
-        editedAtMs = null, forwarded = false, reactions = emptyList(), files = emptyList(), replyTo = null, sharedContact = null,
+        editedAtMs = null, forwarded = false, reactions = emptyList(), files = emptyList(), replyTo = null, sharedContact = null, inTheChannel = null,
     )
 
     private fun messages(vararg pairs: Pair<ByteArray, ULong>) =
