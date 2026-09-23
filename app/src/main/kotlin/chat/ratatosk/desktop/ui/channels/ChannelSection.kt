@@ -73,6 +73,38 @@ fun ChannelSection(
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
 
+        // Сперва один признак словами ядра, затем числа, из которых он
+        // сложен: «раздавать некому» и «есть кому, а мы не дозвонились» —
+        // разные беды, и снаружи они неотличимы.
+        if (channel.signal != org.ratatosk.core.FfiChannelSignal.FINE) {
+            Spacer(Modifier.height(8.dp))
+            Text(
+                viewModel.channelSignalText(channel.signal),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.error,
+            )
+        }
+        Spacer(Modifier.height(8.dp))
+        // `null` — канал наш: себе не раздают.
+        channel.sourcesNow?.let { sources ->
+            Text(
+                if (sources > 0u) Strings.CHANNEL_SOURCES.format(sources.toInt()) else Strings.CHANNEL_SOURCES_NONE,
+                style = MaterialTheme.typography.bodySmall,
+            )
+        }
+        Text(
+            Strings.CHANNEL_SEEDS_KNOWN.format(channel.seedsKnown.toInt()),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        if (channel.awaitingBlocks > 0u) {
+            Text(
+                Strings.CHANNEL_AWAITING_BLOCKS.format(channel.awaitingBlocks.toInt()),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+
         Spacer(Modifier.height(12.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             OutlinedButton(onClick = { showLink = true }) {
@@ -95,6 +127,16 @@ fun ChannelSection(
             if (channel.mayRotate) {
                 OutlinedButton(onClick = { showRotate = true }) { Text(Strings.CHANNEL_ROTATE) }
             }
+        }
+        // Просрочен поворот — только владельцу: чужой ключ повернуть нечем.
+        if (channel.rotationOverdue) {
+            Text(
+                Strings.CHANNEL_ROTATION_OVERDUE,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.error,
+            )
+        }
+        run {
         }
 
         // Своё право со сроком (§6.3): отказ по сроку не должен наступать

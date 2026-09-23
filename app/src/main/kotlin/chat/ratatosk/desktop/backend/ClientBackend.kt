@@ -151,6 +151,11 @@ class ClientBackend(val client: RatatoskClient) : Backend {
                 mayRotate = ch.mayRotate,
                 ownerUnseen = ch.ownerUnseen,
                 grantsExpiring = ch.grantsExpiring,
+                sourcesNow = ch.sourcesNow,
+                seedsKnown = ch.seedsKnown,
+                awaitingBlocks = ch.awaitingBlocks,
+                rotationOverdue = ch.rotationOverdue,
+                signal = ch.signal,
             )
         },
     )

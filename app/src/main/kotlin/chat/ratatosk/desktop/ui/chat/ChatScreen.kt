@@ -302,6 +302,24 @@ fun ChatScreen(
                         }
                     },
                 )
+                // Чем объяснить тишину — один признак, и слова к нему
+                // ядра (§15): выбор главного сделан там же, где факты.
+                group?.channel?.let { ch ->
+                    if (ch.signal != org.ratatosk.core.FfiChannelSignal.FINE) {
+                        Surface(
+                            color = MaterialTheme.colorScheme.secondaryContainer,
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            Text(
+                                text = viewModel.channelSignalText(ch.signal),
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.onSecondaryContainer,
+                                modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp),
+                            )
+                        }
+                    }
+                }
+
                 // Вступление в канал историю не тянет (§7.4): лента
                 // начинается с первого живого слова, а более раннее — по
                 // просьбе. Иначе подписавшийся оплачивал бы год чужой
@@ -353,8 +371,12 @@ fun ChatScreen(
             val channelBlock = when (chat.ratatosk.desktop.model.channelInput(group)) {
                 chat.ratatosk.desktop.model.ChannelInput.ALLOWED -> null
                 chat.ratatosk.desktop.model.ChannelInput.NO_RIGHT -> Strings.CHANNEL_NO_WRITE_RIGHT
-                chat.ratatosk.desktop.model.ChannelInput.AWAITING -> Strings.CHANNEL_AWAITING
-                chat.ratatosk.desktop.model.ChannelInput.NOT_READABLE -> Strings.CHANNEL_NOT_READABLE
+                // Те же две причины, что у признака канала, — и слова
+                // оттуда же: полоса и поле не должны говорить разного.
+                chat.ratatosk.desktop.model.ChannelInput.AWAITING ->
+                    viewModel.channelSignalText(org.ratatosk.core.FfiChannelSignal.AWAITING)
+                chat.ratatosk.desktop.model.ChannelInput.NOT_READABLE ->
+                    viewModel.channelSignalText(org.ratatosk.core.FfiChannelSignal.NOT_READABLE)
             }
             if (channelBlock != null) {
                 Surface(tonalElevation = 2.dp, modifier = Modifier.fillMaxWidth()) {

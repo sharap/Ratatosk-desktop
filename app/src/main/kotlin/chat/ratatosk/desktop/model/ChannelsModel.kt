@@ -81,6 +81,15 @@ fun channelInput(group: Group?): ChannelInput {
 interface ChannelsApi {
     val channelNotices: ChannelNotices
 
+    /**
+     * Слова к признаку канала (§15).
+     *
+     * На границе, а не в клиенте: признак обязан говорить то, что
+     * протокол на самом деле знает, а своя строка разошлась бы
+     * с поведением на первой же правке.
+     */
+    fun channelSignalText(signal: org.ratatosk.core.FfiChannelSignal): String
+
     /** Заявки на впуск, по каналам в hex; §10.4 обещает, что они ждут. */
     val channelRequests: StateFlow<Map<String, List<ChannelRequest>>>
     /** Кого впустили: видно владельцу. */
@@ -161,6 +170,9 @@ class ChannelsModel(session: SessionContext) : FeatureModel(session), ChannelsAp
         seeding = seedingNotice(),
         sharingLevel = sharingLevelNotice(),
     )
+
+    override fun channelSignalText(signal: org.ratatosk.core.FfiChannelSignal): String =
+        org.ratatosk.core.channelSignalText(signal)
 
     private val _channelRequests = MutableStateFlow<Map<String, List<ChannelRequest>>>(emptyMap())
     override val channelRequests = _channelRequests.asStateFlow()

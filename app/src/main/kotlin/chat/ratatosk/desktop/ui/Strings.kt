@@ -621,6 +621,15 @@ object Strings {
         "Those we asked have nothing deeper. A seed with a longer archive may turn up — then it is worth asking again.",
     )
 
+    val CHANNEL_SOURCES = tr("Источников сейчас: %d", "Sources right now: %d")
+    val CHANNEL_SOURCES_NONE = tr(
+        "Никто из достижимых не отдаёт этот канал",
+        "Nobody reachable is giving this channel out",
+    )
+    val CHANNEL_SEEDS_KNOWN = tr("Знаем записей каталога: %d", "Seed records known: %d")
+    val CHANNEL_AWAITING_BLOCKS = tr("Объявлено и ещё едет: %d", "Announced and still on the way: %d")
+    val CHANNEL_ROTATION_OVERDUE = tr("Ключу чтения больше месяца", "The reading key is more than a month old")
+
     val GIVING_LIMITS = tr("Пределы отдачи", "Limits on giving")
     val GIVING_LIMITS_DESC = tr(
         "Сколько блоков в минуту вы отдаёте: одному и всем вместе. Сервера здесь нет, " +
