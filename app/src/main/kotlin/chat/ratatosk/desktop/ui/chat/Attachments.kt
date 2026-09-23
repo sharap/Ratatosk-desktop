@@ -43,6 +43,41 @@ fun AttachmentList(
     Column(Modifier.padding(bottom = 4.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
         files.forEach { file ->
             val hex = file.fileId.toHexString()
+            // Голосовое узнаётся по имени — отдельного поля у ядра нет.
+            // Показываем его записью, а не файлом: «12345.voice.ogg»
+            // человеку не говорит ничего.
+            val voiceMs = chat.ratatosk.desktop.util.VoiceFile.durationMsOf(file.name)
+            if (voiceMs != null) {
+                val fractionVoice = progress[hex]
+                    ?: if (file.chunkTotal > 0UL) (file.receivedChunks.toFloat() / file.chunkTotal.toFloat()).coerceIn(0f, 1f) else 0f
+                Column(
+                    Modifier
+                        .widthIn(min = 240.dp)
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(MaterialTheme.colorScheme.surface)
+                ) {
+                    VoiceBubble(
+                        viewModel = viewModel,
+                        file = file,
+                        durationMs = voiceMs,
+                        preview = previews[hex] ?: if (file.hasPreview) viewModel.getFilePreview(file.fileId) else null,
+                        // Слушать можно принятое: до этого файла на диске нет.
+                        available = file.complete || fractionVoice >= 1f || !file.incoming,
+                        onSave = { viewModel.downloadFile(file, onSaved) },
+                    )
+                    if (file.incoming && !file.accepted && !file.complete && fractionVoice < 1f) {
+                        Row(Modifier.padding(horizontal = 8.dp, vertical = 4.dp)) {
+                            TextButton(onClick = { viewModel.acceptFile(chatId, file.fileId) }) {
+                                Text(Strings.FILE_ACCEPT)
+                            }
+                            TextButton(onClick = { viewModel.declineFile(chatId, file.fileId) }) {
+                                Text(Strings.FILE_DECLINE)
+                            }
+                        }
+                    }
+                }
+                return@forEach
+            }
             val fraction = progress[hex] ?: if (file.chunkTotal > 0UL) (file.receivedChunks.toFloat() / file.chunkTotal.toFloat()).coerceIn(0f, 1f) else 0f
             AttachmentCard(
                 file = file,
@@ -197,7 +232,8 @@ private fun stateLine(
 }
 
 @Composable
-private fun rememberPreview(bytes: ByteArray?): ImageBitmap? = remember(bytes) {
+/** Превью байтами — картинкой; годится и волне голосового. */
+internal fun rememberPreview(bytes: ByteArray?): ImageBitmap? = remember(bytes) {
     bytes?.let { runCatching { org.jetbrains.skia.Image.makeFromEncoded(it).toComposeImageBitmap() }.getOrNull() }
 }
 

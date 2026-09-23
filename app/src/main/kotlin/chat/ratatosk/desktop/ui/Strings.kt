@@ -630,6 +630,15 @@ object Strings {
     val CHANNEL_AWAITING_BLOCKS = tr("Объявлено и ещё едет: %d", "Announced and still on the way: %d")
     val CHANNEL_ROTATION_OVERDUE = tr("Ключу чтения больше месяца", "The reading key is more than a month old")
 
+    // --- Голосовые сообщения ---------------------------------------------
+    val VOICE_MESSAGE = tr("Голосовое", "Voice message")
+    val VOICE_PLAY = tr("Слушать", "Play")
+    val VOICE_PAUSE = tr("Пауза", "Pause")
+    val VOICE_NO_PLAYER = tr(
+        "Слушать нечем: нужен ffmpeg в системе. Запись можно сохранить и открыть чем угодно.",
+        "Nothing to play it with: ffmpeg is needed. The recording can be saved and opened elsewhere.",
+    )
+
     val GIVING_LIMITS = tr("Пределы отдачи", "Limits on giving")
     val GIVING_LIMITS_DESC = tr(
         "Сколько блоков в минуту вы отдаёте: одному и всем вместе. Сервера здесь нет, " +
