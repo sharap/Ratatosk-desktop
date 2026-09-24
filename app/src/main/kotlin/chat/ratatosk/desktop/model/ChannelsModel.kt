@@ -336,7 +336,11 @@ class ChannelsModel(session: SessionContext) : FeatureModel(session), ChannelsAp
     }
 
     override fun createChannel(title: String, open: Boolean) {
-        session.clientIo("Failed to create channel") { it.createChannel(title, open) }
+        // Глубина истории (§5.4) появилась в ядре только что и своего
+        // экрана ещё не имеет. Пока просим «всё» — так канал ведёт себя
+        // как прежде; «ничего» молча отрезало бы от пришедших завтра
+        // всё сказанное сегодня.
+        session.clientIo("Failed to create channel") { it.createChannel(title, open, true) }
     }
 
     override fun subscribeToChannel(uri: String) {

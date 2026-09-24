@@ -665,6 +665,15 @@ object Strings {
         "Nothing to play it with: ffmpeg is needed. The recording can be saved and opened elsewhere.",
     )
 
+    // --- Видеосообщения (кружки) -----------------------------------------
+    // Записывать их на компьютере пока нечем: здесь только просмотр.
+    val VIDEO_MESSAGE = tr("Видеосообщение", "Video message")
+    val VIDEO_PLAY = tr("Смотреть", "Play")
+    val VIDEO_NO_PLAYER = tr(
+        "Смотреть нечем: нужен ffmpeg в системе. Запись можно сохранить и открыть чем угодно.",
+        "Nothing to play it with: ffmpeg is needed. The recording can be saved and opened elsewhere.",
+    )
+
     val GIVING_LIMITS = tr("Пределы отдачи", "Limits on giving")
     val GIVING_LIMITS_DESC = tr(
         "Сколько блоков в минуту вы отдаёте: одному и всем вместе. Сервера здесь нет, " +

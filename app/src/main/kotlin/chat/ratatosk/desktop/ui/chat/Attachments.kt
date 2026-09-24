@@ -43,6 +43,40 @@ fun AttachmentList(
     Column(Modifier.padding(bottom = 4.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
         files.forEach { file ->
             val hex = file.fileId.toHexString()
+            // Кружок узнаётся по имени — как и голосовое. Записывать
+            // их здесь пока нечем, а смотреть — тем же ffmpeg.
+            val videoMs = chat.ratatosk.desktop.util.VideoFile.durationMsOf(file.name)
+            if (videoMs != null) {
+                val fractionVideo = progress[hex]
+                    ?: if (file.chunkTotal > 0UL) (file.receivedChunks.toFloat() / file.chunkTotal.toFloat()).coerceIn(0f, 1f) else 0f
+                Column(
+                    Modifier
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(MaterialTheme.colorScheme.surface)
+                ) {
+                    VideoBubble(
+                        viewModel = viewModel,
+                        file = file,
+                        durationMs = videoMs,
+                        preview = previews[hex] ?: if (file.hasPreview) viewModel.getFilePreview(file.fileId) else null,
+                        // Смотреть можно принятое: до этого файла на диске нет.
+                        available = file.complete || fractionVideo >= 1f || !file.incoming,
+                        onSave = { viewModel.downloadFile(file, onSaved) },
+                    )
+                    if (file.incoming && !file.accepted && !file.complete && fractionVideo < 1f) {
+                        Row(Modifier.padding(horizontal = 8.dp, vertical = 4.dp)) {
+                            TextButton(onClick = { viewModel.acceptFile(chatId, file.fileId) }) {
+                                Text(Strings.FILE_ACCEPT)
+                            }
+                            TextButton(onClick = { viewModel.declineFile(chatId, file.fileId) }) {
+                                Text(Strings.FILE_DECLINE)
+                            }
+                        }
+                    }
+                }
+                return@forEach
+            }
+
             // Голосовое узнаётся по имени — отдельного поля у ядра нет.
             // Показываем его записью, а не файлом: «12345.voice.ogg»
             // человеку не говорит ничего.
