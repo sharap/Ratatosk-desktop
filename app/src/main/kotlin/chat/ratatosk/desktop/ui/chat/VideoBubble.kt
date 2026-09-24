@@ -59,7 +59,14 @@ fun VideoBubble(
     file: FfiFile,
     durationMs: Long,
     preview: ByteArray?,
+    /** Смотреть можно: файл принят целиком (или он наш). */
     available: Boolean,
+    /** Сколько кружка уже приехало; `null` — приём ни при чём. */
+    receiveFraction: Float? = null,
+    /** Сколько ушло, если кружок наш и ещё едет. */
+    sendFraction: Float? = null,
+    /** Почему передача стоит — словами ядра; `null` — не стоит. */
+    waitingText: String? = null,
     onSave: () -> Unit,
 ) {
     val scope = rememberCoroutineScope()
@@ -171,6 +178,13 @@ fun VideoBubble(
 
             when {
                 preparing -> CircularProgressIndicator(Modifier.size(44.dp), color = Color.White)
+                // Ещё едет: доля словами, потому что кольцо на четверти
+                // круга на глаз от половины не отличить.
+                !available && receiveFraction != null -> Text(
+                    text = "${(receiveFraction * 100).toInt()}%",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = Color.White,
+                )
                 !playing && available -> Icon(
                     Icons.Default.PlayArrow,
                     contentDescription = Strings.VIDEO_PLAY,
@@ -179,28 +193,48 @@ fun VideoBubble(
                 )
             }
 
-            // Сколько проиграно — кольцом по краю: полоса под круглым
-            // кадром выглядела бы приделанной сбоку.
-            if (playing || positionMs > 0) {
+            // Кольцо по краю — одно на всё: сколько приехало, сколько ушло,
+            // сколько проиграно. Полоса под круглым кадром выглядела бы
+            // приделанной сбоку, а три полосы — тем более.
+            val ring = when {
+                !available -> receiveFraction
+                sendFraction != null -> sendFraction
+                playing || positionMs > 0 -> fraction
+                else -> null
+            }
+            if (ring != null) {
                 CircularProgressIndicator(
-                    progress = { fraction },
+                    progress = { ring.coerceIn(0f, 1f) },
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.primary,
-                    trackColor = Color.Transparent,
+                    trackColor = Color.White.copy(alpha = 0.25f),
                     strokeWidth = 3.dp,
                 )
             }
         }
 
         Text(
-            // Пока играет или промотано — остаток: важно, сколько ещё.
-            text = if (playing || positionMs > 0) {
-                "−" + formatVoiceDuration((durationMs - positionMs).coerceAtLeast(0))
-            } else {
-                formatVoiceDuration(durationMs)
+            text = when {
+                // Пока играет или промотано — остаток: важно, сколько ещё.
+                available && (playing || positionMs > 0) ->
+                    "−" + formatVoiceDuration((durationMs - positionMs).coerceAtLeast(0))
+                available -> formatVoiceDuration(durationMs)
+                // Длительность известна из имени ещё до файла — она и
+                // говорит, сколько ждать, а не только «сколько байт».
+                else -> Strings.VIDEO_MESSAGE + ", " + formatVoiceDuration(durationMs)
             },
             style = MaterialTheme.typography.labelMedium,
             modifier = Modifier.padding(top = 4.dp),
         )
+
+        // Стоит не «просто так»: причину знает ядро, и словами её говорит оно.
+        waitingText?.let {
+            Text(
+                text = it,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.outline,
+                modifier = Modifier.padding(top = 2.dp),
+            )
+        }
     }
 }

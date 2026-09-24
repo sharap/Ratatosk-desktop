@@ -61,6 +61,10 @@ fun AttachmentList(
                         preview = previews[hex] ?: if (file.hasPreview) viewModel.getFilePreview(file.fileId) else null,
                         // Смотреть можно принятое: до этого файла на диске нет.
                         available = file.complete || fractionVideo >= 1f || !file.incoming,
+                        // Ход приёма и отправки — кольцом по краю кружка.
+                        receiveFraction = if (file.complete || !file.incoming) null else fractionVideo,
+                        sendFraction = sending[hex],
+                        waitingText = if (file.complete) null else waiting[hex],
                         onSave = { viewModel.downloadFile(file, onSaved) },
                     )
                     if (file.incoming && !file.accepted && !file.complete && fractionVideo < 1f) {
