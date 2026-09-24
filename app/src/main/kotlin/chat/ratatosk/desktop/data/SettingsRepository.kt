@@ -24,6 +24,11 @@ class SettingsRepository(
         val CORE_LOG_ENABLED = booleanPreferencesKey("core_log_enabled")
         val SEND_WITH_CTRL_ENTER = booleanPreferencesKey("send_with_ctrl_enter")
         val LAST_ACCOUNT_ID = stringPreferencesKey("last_account_id")
+
+        // Каналы, об открытии которых человек просил сказать (§10.5).
+        // Общая на приложение и на диске: ждать можно часами, и переживать
+        // перезапуск просьба обязана.
+        val CHANNELS_TO_ANNOUNCE = stringPreferencesKey("channels_to_announce")
     }
 
     val accountsMap: Flow<Map<String, String>> = dataStore.data.map { preferences ->
@@ -64,6 +69,20 @@ class SettingsRepository(
     private fun accountKey(accountId: String, key: String) = "${accountId}_$key"
 
     fun getDisplayName(accountId: String): Flow<String?> = dataStore.data.map { it[stringPreferencesKey(accountKey(accountId, "display_name"))] }
+    /** Каналы (chatId в hex), об открытии которых просили сказать. */
+    val channelsToAnnounce: Flow<Set<String>> = dataStore.data.map { preferences ->
+        preferences[Keys.CHANNELS_TO_ANNOUNCE]?.split(",")?.filter { it.isNotBlank() }?.toSet() ?: emptySet()
+    }
+
+    suspend fun announceChannelWhenOpen(chatIdHex: String, announce: Boolean) {
+        dataStore.edit { preferences ->
+            val current = preferences[Keys.CHANNELS_TO_ANNOUNCE]
+                ?.split(",")?.filter { it.isNotBlank() }?.toMutableSet() ?: mutableSetOf()
+            if (announce) current.add(chatIdHex) else current.remove(chatIdHex)
+            preferences[Keys.CHANNELS_TO_ANNOUNCE] = current.joinToString(",")
+        }
+    }
+
     fun getNotificationsShowName(accountId: String): Flow<Boolean> = dataStore.data.map { it[booleanPreferencesKey(accountKey(accountId, "notifications_show_name"))] ?: true }
     fun getNotificationsShowText(accountId: String): Flow<Boolean> = dataStore.data.map { it[booleanPreferencesKey(accountKey(accountId, "notifications_show_text"))] ?: true }
     fun getDownloadDirPath(accountId: String): Flow<String?> = dataStore.data.map { it[stringPreferencesKey(accountKey(accountId, "download_dir_path"))] }

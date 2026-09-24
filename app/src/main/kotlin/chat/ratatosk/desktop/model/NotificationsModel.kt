@@ -84,6 +84,7 @@ class NotificationsModel(
 
     init {
         chats.activeChatIdFlow.onEach { dismissIfSeen() }.launchIn(scope)
+        groups.groups.onEach { announceOpenedChannels(it) }.launchIn(scope)
     }
 
     override fun setWindowFocused(focused: Boolean) {
@@ -202,6 +203,47 @@ class NotificationsModel(
                     title = Strings.CHANNEL_REQUEST_NOTIFY_TITLE,
                     body = body,
                     chatId = event.chatId,
+                    msgId = null,
+                )
+            )
+        }
+    }
+
+    /**
+     * Канал, которого ждали, открылся (§10.5).
+     *
+     * «Открылся» — это состояние, а не событие: ядро о переходе не
+     * рассказывает, поэтому смотрим на сами каналы — у спрошенного
+     * пропало расписание ожидания. Сказали — просьбу сняли: второй раз
+     * об этом же канале говорить незачем.
+     */
+    private suspend fun announceOpenedChannels(groups: List<chat.ratatosk.desktop.backend.Group>) {
+        val asked = session.settings.channelsToAnnounce.first()
+        if (asked.isEmpty()) return
+
+        groups.forEach { group ->
+            val hex = group.chatId.toHexString()
+            if (hex !in asked) return@forEach
+            val channel = group.channel ?: return@forEach
+            if (channel.waiting != null) return@forEach
+
+            session.settings.announceChannelWhenOpen(hex, false)
+            // Человек смотрит прямо на этот канал: полоска ожидания у него
+            // и так пропала, уведомление было бы шумом.
+            if (isSeen(group.chatId)) return@forEach
+
+            val (showName, _) = privacy()
+            val body = if (showName && group.title.isNotBlank()) {
+                Strings.CHANNEL_OPENED_BODY.format(group.title)
+            } else {
+                Strings.CHANNEL_OPENED_BODY_PLAIN
+            }
+            _requests.tryEmit(
+                NotificationRequest(
+                    key = "channel-open:$hex",
+                    title = Strings.CHANNEL_OPENED_TITLE,
+                    body = body,
+                    chatId = group.chatId,
                     msgId = null,
                 )
             )

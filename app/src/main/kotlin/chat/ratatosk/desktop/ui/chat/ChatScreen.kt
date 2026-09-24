@@ -96,6 +96,7 @@ fun ChatScreen(
     val isCompanion by viewModel.isCompanionMode.collectAsState()
     val isFresh by viewModel.isCompanionFresh.collectAsState()
     val companionLinked by viewModel.isCompanionLinked.collectAsState()
+    val announcingChannels by viewModel.channelsToAnnounce.collectAsState()
     val notices = viewModel.chatNotices
 
     val contact = contacts.firstOrNull { it.chatId.contentEquals(chatId) }
@@ -315,12 +316,33 @@ fun ChatScreen(
                 // а не про отказ.
                 group?.channel?.waiting?.let { waiting ->
                     Surface(color = MaterialTheme.colorScheme.tertiaryContainer, modifier = Modifier.fillMaxWidth()) {
-                        Text(
-                            viewModel.channelWaitingText(waiting),
-                            style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.onTertiaryContainer,
+                        Row(
                             modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp),
-                        )
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text(
+                                viewModel.channelWaitingText(waiting),
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.onTertiaryContainer,
+                                modifier = Modifier.weight(1f),
+                            )
+                            // Кнопку предлагает ядро: пока ожидание короткое,
+                            // ждать у экрана не накладно, и предлагать нечего
+                            // (§10.5).
+                            if (viewModel.channelWaitingOffersNotification(waiting)) {
+                                if (chatHex in announcingChannels) {
+                                    Text(
+                                        Strings.CHANNEL_ANNOUNCE_ASKED,
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onTertiaryContainer,
+                                    )
+                                } else {
+                                    TextButton(onClick = { viewModel.announceChannelWhenOpen(chatId, true) }) {
+                                        Text(Strings.CHANNEL_ANNOUNCE_WHEN_OPEN)
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
 

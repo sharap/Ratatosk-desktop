@@ -2,9 +2,11 @@ package chat.ratatosk.desktop.model
 
 import chat.ratatosk.desktop.backend.AppEvent
 import chat.ratatosk.desktop.backend.Backend
+import chat.ratatosk.desktop.backend.Channel
 import chat.ratatosk.desktop.backend.Group
 import chat.ratatosk.desktop.backend.GroupMember
 import chat.ratatosk.desktop.data.SettingsRepository
+import chat.ratatosk.desktop.ui.Strings
 import chat.ratatosk.desktop.util.toHexString
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -295,6 +297,53 @@ class ModelsWithFakeBackendTest {
         assertTrue(requests[0].chatId.contentEquals(chatB))
     }
 
+    /**
+     * «Канал открылся» — состояние, а не событие: замечаем по самим каналам.
+     *
+     * Ждать можно часами, поэтому просьба лежит в настройках; сказали —
+     * просьбу сняли, иначе об одном и том же канале говорилось бы при
+     * каждом обновлении списка.
+     */
+    @Test
+    fun anAwaitedChannelIsAnnouncedOnceWhenItOpens() {
+        val contacts = ContactsModel(session)
+        val groups = GroupsModel(session)
+        val chats = ChatsModel(session)
+        val channels = ChannelsModel(session)
+        // Просьба живёт в настройках, а поток читается, пока на него
+        // подписаны, — подписчик здесь за экран.
+        scope.launch { channels.channelsToAnnounce.collect {} }
+        val notifications = NotificationsModel(session, contacts, groups, chats)
+        val requests = Collections.synchronizedList(mutableListOf<NotificationRequest>())
+        scope.launch { notifications.notificationRequests.collect { requests += it } }
+
+        channels.announceChannelWhenOpen(chatA, true)
+        waitUntil { chatA.toHexString() in channels.channelsToAnnounce.value }
+
+        // Пока канал открывается — молчим.
+        val waiting = channel(org.ratatosk.core.FfiWaiting.SLOW_PATH)
+        notifyGroups(groups, listOf(group(chatA, joined = true, canManage = false, channel = waiting)))
+        Thread.sleep(50)
+        assertTrue(requests.isEmpty())
+
+        // Расписание ожидания пропало — канал открылся.
+        notifyGroups(groups, listOf(group(chatA, joined = true, canManage = false, channel = channel(null))))
+        waitUntil { requests.size == 1 }
+        assertEquals(Strings.CHANNEL_OPENED_TITLE, requests[0].title)
+        assertArrayEquals(chatA, requests[0].chatId)
+
+        // Просьбы больше нет: следующий такой же список молчит.
+        waitUntil { chatA.toHexString() !in channels.channelsToAnnounce.value }
+        notifyGroups(groups, listOf(group(chatA, joined = true, canManage = false, channel = channel(null))))
+        Thread.sleep(50)
+        assertEquals(1, requests.size)
+    }
+
+    /** Уведомления смотрят на сам список каналов, а не на событие. */
+    private fun notifyGroups(groups: GroupsModel, list: List<Group>) {
+        groups.onEvent(AppEvent.ChatsLoaded(emptyList(), list, fresh = false))
+    }
+
     // --- Подставной Backend ------------------------------------------------
 
     private class FakeBackend(override val isCompanion: Boolean) : Backend {
@@ -354,8 +403,15 @@ class ModelsWithFakeBackendTest {
             directChannel = null, anomalies = FfiAnomalies(0UL, 0UL, 0UL, 0UL, 0UL), ygg = null, nostrRelays = emptyList(),
         )
 
-        fun group(chatId: ByteArray, joined: Boolean, canManage: Boolean?) =
-            Group(chatId, "Группа", joined, canManage, avatarMs = 0UL, createdMs = null)
+        fun group(chatId: ByteArray, joined: Boolean, canManage: Boolean?, channel: Channel? = null) =
+            Group(chatId, "Группа", joined, canManage, avatarMs = 0UL, createdMs = null, channel = channel)
+
+        fun channel(waiting: org.ratatosk.core.FfiWaiting?) = Channel(
+            open = true, mine = false, canWrite = false, canAdmit = false, rightsUntilMs = 0UL,
+            powBits = 0u, awaiting = false, readable = true, mayRotate = false, ownerUnseen = false,
+            grantsExpiring = 0u, sourcesNow = 1u, seedsKnown = 1u, awaitingBlocks = 0u,
+            rotationOverdue = false, signal = org.ratatosk.core.FfiChannelSignal.FINE, waiting = waiting,
+        )
 
         fun message(msgId: ByteArray) = FfiMessage(
             msgId = msgId, body = "x", mine = false, wallMs = 0UL, status = FfiDeliveryStatus.DELIVERED,

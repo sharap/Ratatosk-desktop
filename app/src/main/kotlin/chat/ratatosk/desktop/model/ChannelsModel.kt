@@ -10,9 +10,12 @@ import chat.ratatosk.desktop.backend.Group
 import chat.ratatosk.desktop.util.toHexString
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.ratatosk.core.FfiChannelRights
 import org.ratatosk.core.FfiSeeding
@@ -123,6 +126,17 @@ interface ChannelsApi {
     fun channelWaitingOffersNotification(waiting: org.ratatosk.core.FfiWaiting): Boolean
 
     /**
+     * Каналы (chatId в hex), об открытии которых просили сказать.
+     *
+     * Просьба живёт на диске: ожидание меряется часами, и переживать
+     * перезапуск она обязана.
+     */
+    val channelsToAnnounce: StateFlow<Set<String>>
+
+    /** Просить или отменить просьбу сказать, когда канал откроется. */
+    fun announceChannelWhenOpen(chatId: ByteArray, announce: Boolean)
+
+    /**
      * Предпросмотр канала по ссылке (§10.3, шаг 5).
      *
      * Перед вызовом обязателен текст §15: владелец узнает, что кем-то
@@ -229,6 +243,14 @@ class ChannelsModel(session: SessionContext) : FeatureModel(session), ChannelsAp
 
     override fun channelWaitingOffersNotification(waiting: org.ratatosk.core.FfiWaiting): Boolean =
         org.ratatosk.core.channelWaitingOffersANotification(waiting)
+
+    override val channelsToAnnounce: StateFlow<Set<String>> = session.settings.channelsToAnnounce
+        .stateIn(session.scope, SharingStarted.WhileSubscribed(5000), emptySet())
+
+    override fun announceChannelWhenOpen(chatId: ByteArray, announce: Boolean) {
+        val hex = chatId.toHexString()
+        session.scope.launch { session.settings.announceChannelWhenOpen(hex, announce) }
+    }
 
     private val _channelPreview = MutableStateFlow<ChannelPreview?>(null)
     override val channelPreview = _channelPreview.asStateFlow()
