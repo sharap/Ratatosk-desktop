@@ -438,4 +438,28 @@ class ModelsWithFakeBackendTest {
         assertTrue(preview.open)
         assertEquals(12u, preview.powBits)
     }
+
+    /**
+     * Опоздавший ответ на предпросмотр не всплывает в следующем окне.
+     *
+     * Человек посмотрел канал, передумал и закрыл окно; владелец ответил
+     * через минуту. Без этого ответ лежал в состоянии и встречал его
+     * в следующий раз — с чужой ссылкой и чужим названием.
+     */
+    @Test
+    fun aLatePreviewAnswerIsDropped() {
+        val channels = ChannelsModel(session)
+
+        channels.previewChannel("ratatosk:v0:channel:AAAA")
+        waitUntil { backend.calls.any { it.startsWith("previewChannel") } }
+
+        // Окно закрыли, не дождавшись.
+        channels.clearChannelPreview()
+
+        channels.onEvent(
+            AppEvent.ChannelPreviewed(chatA, "Поздний ответ", open = true, version = 1UL, powBits = 0u)
+        )
+
+        assertNull(channels.channelPreview.value)
+    }
 }
