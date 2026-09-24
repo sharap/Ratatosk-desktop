@@ -35,6 +35,7 @@ class ChannelInputTest {
         awaitingBlocks = 0u,
         rotationOverdue = false,
         signal = org.ratatosk.core.FfiChannelSignal.FINE,
+        waiting = null,
     )
 
     private fun group(channel: Channel? = null) = Group(

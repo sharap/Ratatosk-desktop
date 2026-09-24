@@ -68,6 +68,28 @@ interface Backend {
 
     // --- Переписка --------------------------------------------------------
     fun requestHistory(chatId: ByteArray, limit: UInt)
+
+    /**
+     * Окно сообщений **перед** названным — листание назад.
+     *
+     * Якорь — `msg_id` того, что сейчас первое в списке: клиент его уже
+     * знает. Ответ приходит [AppEvent.OlderHistoryLoaded]; пустой список
+     * означает начало переписки либо что якоря больше нет.
+     *
+     * У второго экрана листания нет: телефон отвечает целым окном,
+     * и подмешивать его к дописанному сверху нечем.
+     */
+    fun requestOlderHistory(chatId: ByteArray, before: ByteArray, limit: UInt) {}
+
+    /**
+     * Предпросмотр канала по ссылке (§10.3, шаг 5).
+     *
+     * Ответ — [AppEvent.ChannelPreviewed]; ответа может и не быть,
+     * и это не отказ (§10.5). Перед вызовом окно обязано показать
+     * `channel_preview_notice`: владелец узнает, что кем-то
+     * интересуются, даже если человек потом откажется.
+     */
+    fun previewChannel(uri: String) {}
     /** Чат открыт на экране. */
     fun chatOpened(chatId: ByteArray)
     fun sendText(chatId: ByteArray, text: String)

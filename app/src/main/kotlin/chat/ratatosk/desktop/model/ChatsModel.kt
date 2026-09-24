@@ -36,6 +36,21 @@ interface ChatsApi {
     val activeChatId: SharedFlow<ByteArray?>
     val activeChatIdFlow: StateFlow<ByteArray?>
     fun loadMessages(chatId: ByteArray, limit: Int? = null)
+
+    /** Идёт ли подгрузка более ранних сообщений, по чатам в hex. */
+    val olderLoading: StateFlow<Set<String>>
+
+    /**
+     * Чаты, у которых дальше некуда листать: приехало пустое окно.
+     *
+     * Пустое означает начало переписки либо что якоря больше нет — и то
+     * и другое значит «листать не от чего»; показывать вместо этого
+     * конец переписки было бы обманом.
+     */
+    val historyAtStart: StateFlow<Set<String>>
+
+    /** Просит окно перед самым старым известным (§листание назад). */
+    fun loadOlderMessages(chatId: ByteArray)
     /** Какой чат виден человеку; зовёт навигация. */
     fun setActiveChat(chatId: ByteArray?)
     fun searchMessages(chatId: ByteArray?, query: String)
@@ -82,6 +97,9 @@ interface ChatsApi {
 }
 
 /** Переписка: история, активный чат, отправка, правка, реакции, поиск. */
+/** Сколько сообщений тянуть за раз назад: экран прокручивают, а не листают. */
+private const val PAGE = 50
+
 class ChatsModel(session: SessionContext) : FeatureModel(session), ChatsApi {
     private val _messages = MutableStateFlow<Map<String, List<FfiMessage>>>(emptyMap())
     override val messages = _messages.asStateFlow()
@@ -298,6 +316,23 @@ class ChatsModel(session: SessionContext) : FeatureModel(session), ChatsApi {
             .firstOrNull { (_, list) -> list.any { msg -> msg.files.any { it.fileId.contentEquals(fileId) } } }
             ?.key?.hexToByteArray()
 
+    private val _olderLoading = MutableStateFlow<Set<String>>(emptySet())
+    override val olderLoading = _olderLoading.asStateFlow()
+
+    private val _historyAtStart = MutableStateFlow<Set<String>>(emptySet())
+    override val historyAtStart = _historyAtStart.asStateFlow()
+
+    override fun loadOlderMessages(chatId: ByteArray) {
+        // У второго экрана окна приходят целиком — листать нечем.
+        if (session.backend?.isCompanion == true) return
+        val hex = chatId.toHexString()
+        if (hex in _historyAtStart.value || hex in _olderLoading.value) return
+        val anchor = _messages.value[hex]?.firstOrNull() ?: return
+
+        _olderLoading.update { it + hex }
+        session.io("Failed to load older messages") { it.requestOlderHistory(chatId, anchor.msgId, PAGE.toUInt()) }
+    }
+
     override fun onEvent(event: AppEvent) {
         when (event) {
             is AppEvent.ChatsLoaded -> {
@@ -305,6 +340,21 @@ class ChatsModel(session: SessionContext) : FeatureModel(session), ChatsApi {
                 // на каждое входящее, а перечитывать все чаты незачем.
                 (event.chats.map { it.chatId } + event.groups.map { it.chatId }).forEach { chatId ->
                     if (!loadedLimits.containsKey(chatId.toHexString())) loadMessages(chatId)
+                }
+            }
+            is AppEvent.OlderHistoryLoaded -> {
+                val hex = event.chatId.toHexString()
+                _olderLoading.update { it - hex }
+                if (event.messages.isEmpty()) {
+                    _historyAtStart.update { it + hex }
+                } else {
+                    _messages.update { all ->
+                        val current = all[hex].orEmpty()
+                        // Сверху и без повторов: окна накладываются, и одно
+                        // и то же сообщение человек увидел бы дважды.
+                        val known = current.mapTo(HashSet()) { it.msgId.toHexString() }
+                        all + (hex to (event.messages.filterNot { known.contains(it.msgId.toHexString()) } + current))
+                    }
                 }
             }
             is AppEvent.HistoryLoaded -> {
@@ -340,6 +390,8 @@ class ChatsModel(session: SessionContext) : FeatureModel(session), ChatsApi {
         _activeChatId.value = null
         _activeChatIdFlow.value = null
         _messages.value = emptyMap()
+        _olderLoading.value = emptySet()
+        _historyAtStart.value = emptySet()
         _messageStatuses.value = emptyMap()
         _repliedMessages.value = emptyMap()
         _unreadCounts.value = emptyMap()

@@ -166,6 +166,7 @@ fun ChatListScreen(
                     items(chats, key = { it.key }) { item ->
                         val hexId = item.key
                         ChatRow(
+                            onWaitingText = { viewModel.channelWaitingText(it) },
                             item = item,
                             unread = unreadCounts[hexId] ?: 0,
                             selected = selectedChatId?.contentEquals(item.chatId) == true,
@@ -227,6 +228,8 @@ private fun ChatRow(
     unread: Int,
     selected: Boolean,
     avatar: ByteArray?,
+    /** Слова к ожиданию канала — из ядра, у строки своих нет. */
+    onWaitingText: (org.ratatosk.core.FfiWaiting) -> String,
     onClick: () -> Unit,
     onOpenCard: () -> Unit,
 ) {
@@ -273,20 +276,33 @@ private fun ChatRow(
                 }
             },
             supportingContent = {
-                // Тем же помощником, что и уведомления: разметка снята,
-                // у вложения — подпись вместо пустой строки.
-                val preview = remember(last?.body, last?.files?.size, last?.sharedContact) {
-                    last?.let { MessagePreview.of(it) }
+                // Ожидание живёт в списке чатов, а не на экране канала:
+                // иначе человек закроет экран и потеряет ссылку (§10.5).
+                val waiting = channel?.waiting
+                if (waiting != null) {
+                    Text(
+                        text = onWaitingText(waiting),
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.tertiary,
+                    )
+                } else {
+                    // Тем же помощником, что и уведомления: разметка снята,
+                    // у вложения — подпись вместо пустой строки.
+                    val preview = remember(last?.body, last?.files?.size, last?.sharedContact) {
+                        last?.let { MessagePreview.of(it) }
+                    }
+                    Text(
+                        text = when {
+                            preview == null -> Strings.GROUP_NO_MESSAGES
+                            last?.mine == true -> Strings.YOU_PREFIX.format(preview)
+                            else -> preview
+                        },
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
                 }
-                Text(
-                    text = when {
-                        preview == null -> Strings.GROUP_NO_MESSAGES
-                        last?.mine == true -> Strings.YOU_PREFIX.format(preview)
-                        else -> preview
-                    },
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
             },
             leadingContent = {
                 if (isGroup && avatar == null) {

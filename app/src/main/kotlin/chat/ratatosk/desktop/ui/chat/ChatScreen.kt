@@ -310,10 +310,26 @@ fun ChatScreen(
                         }
                     },
                 )
+                // Канал ещё не открылся: расписание ожидания словами ядра
+                // (§10.5). Молчание — не тупик, поэтому текст про ожидание,
+                // а не про отказ.
+                group?.channel?.waiting?.let { waiting ->
+                    Surface(color = MaterialTheme.colorScheme.tertiaryContainer, modifier = Modifier.fillMaxWidth()) {
+                        Text(
+                            viewModel.channelWaitingText(waiting),
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onTertiaryContainer,
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp),
+                        )
+                    }
+                }
+
                 // Чем объяснить тишину — один признак, и слова к нему
                 // ядра (§15): выбор главного сделан там же, где факты.
                 group?.channel?.let { ch ->
-                    if (ch.signal != org.ratatosk.core.FfiChannelSignal.FINE) {
+                    // Пока канал открывается, объяснять тишину нечем —
+                    // об этом уже сказано выше.
+                    if (ch.waiting == null && ch.signal != org.ratatosk.core.FfiChannelSignal.FINE) {
                         Surface(
                             color = MaterialTheme.colorScheme.secondaryContainer,
                             modifier = Modifier.fillMaxWidth(),
@@ -432,6 +448,17 @@ fun ChatScreen(
                 Image(rememberAsyncImagePainter(uri), null, Modifier.fillMaxSize(), contentScale = ContentScale.Crop, alpha = chatTheme.backgroundOpacity)
             }
 
+            // Доскроллили до старого края — просим ещё окно. Список
+            // перевёрнут, поэтому «старое» — последние видимые позиции.
+            LaunchedEffect(listState, chatId.contentHashCode(), display.size) {
+                snapshotFlow { listState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0 }
+                    .collect { last ->
+                        if (display.isNotEmpty() && last >= display.size - 3) {
+                            viewModel.loadOlderMessages(chatId)
+                        }
+                    }
+            }
+
             if (searchOpen && query.isNotBlank()) {
                 SearchResults(viewModel, onPick = { jumpTo(it.msgId) })
             } else {
@@ -442,6 +469,29 @@ fun ChatScreen(
                     modifier = Modifier.fillMaxSize(),
                     contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
                 ) {
+                    // Список перевёрнут: старое в конце. Доехали до него —
+                    // просим окно перед самым старым.
+                    item(key = "older") {
+                        val loadingOlder by viewModel.olderLoading.collectAsState()
+                        val atStart by viewModel.historyAtStart.collectAsState()
+                        val hex = chatId.toHexString()
+                        when {
+                            hex in atStart -> Text(
+                                Strings.HISTORY_AT_START,
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.outline,
+                                modifier = Modifier.fillMaxWidth().padding(8.dp),
+                                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                            )
+                            hex in loadingOlder -> Box(
+                                Modifier.fillMaxWidth().padding(8.dp),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
+                            }
+                            else -> Spacer(Modifier.height(1.dp))
+                        }
+                    }
                     items(display, key = { it.key }) { message ->
                         MessageItem(
                             message = message,

@@ -607,6 +607,11 @@ object Strings {
         "Only verified — usually a handful, closer to not sharing at all",
     )
     val CHANNEL_RENAME = tr("Переименовать канал", "Rename the channel")
+    val CHANNEL_PREVIEW = tr("Посмотреть канал", "Look at the channel")
+    val CHANNEL_PREVIEW_POW = tr("Каждое слово стоит работы: %d бит", "Each post costs work: %d bits")
+    val CHANNEL_SUBSCRIBE_ANYWAY = tr("Подписаться, не глядя", "Subscribe without looking")
+    val CHANNEL_OPENING = tr("Открываем канал…", "Opening the channel…")
+    val HISTORY_AT_START = tr("Начало переписки", "The beginning of this conversation")
     val CHANNEL_ADD_AUTHOR = tr("Добавить соавтора", "Add an author")
     val CHANNEL_ADD_AUTHOR_DESC = tr(
         "Выдать контакту право писать в этом канале. В открытом канале списка читателей нет — " +

@@ -317,6 +317,11 @@ class ModelsWithFakeBackendTest {
         override fun setGroupAvatar(chatId: ByteArray, bytes: ByteArray?) = rec("groupAvatar")
         override fun requestMembers(chatId: ByteArray) = rec("members")
         override fun requestHistory(chatId: ByteArray, limit: UInt) = rec("requestHistory:${chatId.toHexString()}:$limit")
+
+        override fun requestOlderHistory(chatId: ByteArray, before: ByteArray, limit: UInt) =
+            rec("requestOlderHistory:${before.toHexString()}")
+
+        override fun previewChannel(uri: String) = rec("previewChannel:$uri")
         override fun chatOpened(chatId: ByteArray) = rec("chatOpened")
         override fun sendText(chatId: ByteArray, text: String) = rec("sendText:${chatId.toHexString()}:$text")
         override fun sendFiles(chatId: ByteArray, files: List<File>, text: String) = rec("sendFiles")
@@ -340,6 +345,7 @@ class ModelsWithFakeBackendTest {
         val chatB = ByteArray(16) { 2 }
         val ikA = ByteArray(32) { 3 }
         val msg1 = ByteArray(16) { 4 }
+        val msg2 = ByteArray(16) { 5 }
 
         fun contact(chatId: ByteArray, peerIk: ByteArray) = FfiContact(
             peerIk = peerIk, chatId = chatId, fingerprint = "", displayName = "A", localName = null,
@@ -364,5 +370,72 @@ class ModelsWithFakeBackendTest {
                 Thread.sleep(5)
             }
         }
+
+    }
+
+    /**
+     * Листание назад дописывает окно сверху и не повторяет показанное.
+     *
+     * Окна накладываются: ядро отдаёт страницу перед якорем, а он сам
+     * может в неё попасть. Повтор человек увидел бы сразу — одно и то
+     * же сообщение дважды.
+     */
+    @Test
+    fun olderMessagesAreAddedOnTopWithoutRepeats() {
+        // Листание — дело полного клиента: у второго экрана окна приходят
+        // целиком, и подмешивать к ним нечего.
+        val client = FakeBackend(isCompanion = false)
+        session.backend = client
+        val chats = ChatsModel(session)
+        chats.onEvent(AppEvent.HistoryLoaded(chatA, listOf(message(msg1)), fresh = false))
+
+        chats.loadOlderMessages(chatA)
+        waitUntil { client.calls.any { it.startsWith("requestOlderHistory") } }
+
+        chats.onEvent(
+            AppEvent.OlderHistoryLoaded(chatA, listOf(message(msg2), message(msg1)))
+        )
+
+        val shown = chats.messages.value[chatA.toHexString()]!!
+        assertEquals(2, shown.size)
+        assertArrayEquals(msg2, shown.first().msgId)
+        assertArrayEquals(msg1, shown.last().msgId)
+    }
+
+    /** Пустое окно означает начало переписки, а не «спросить снова». */
+    @Test
+    fun anEmptyPageMeansTheBeginning() {
+        val client = FakeBackend(isCompanion = false)
+        session.backend = client
+        val chats = ChatsModel(session)
+        chats.onEvent(AppEvent.HistoryLoaded(chatA, listOf(message(msg1)), fresh = false))
+
+        chats.loadOlderMessages(chatA)
+        // Просьба уходит в фоне — дождёмся её, иначе считать нечего.
+        waitUntil { client.calls.any { it.startsWith("requestOlderHistory") } }
+        chats.onEvent(AppEvent.OlderHistoryLoaded(chatA, emptyList()))
+
+        assertTrue(chatA.toHexString() in chats.historyAtStart.value)
+        val asked = client.calls.count { it.startsWith("requestOlderHistory") }
+        chats.loadOlderMessages(chatA)
+        assertEquals(asked, client.calls.count { it.startsWith("requestOlderHistory") })
+    }
+
+    /** Предпросмотр отвечает событием, и из него видна настоящая порода. */
+    @Test
+    fun aPreviewTellsTheRealKind() {
+        val channels = ChannelsModel(session)
+
+        channels.previewChannel("ratatosk:v0:channel:AAAA")
+        waitUntil { backend.calls.any { it.startsWith("previewChannel") } }
+
+        channels.onEvent(
+            AppEvent.ChannelPreviewed(chatA, "Канал Пети", open = true, version = 7UL, powBits = 12u)
+        )
+
+        val preview = channels.channelPreview.value!!
+        assertEquals("Канал Пети", preview.title)
+        assertTrue(preview.open)
+        assertEquals(12u, preview.powBits)
     }
 }

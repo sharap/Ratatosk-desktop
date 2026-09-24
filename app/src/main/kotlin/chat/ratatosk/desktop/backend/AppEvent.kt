@@ -73,6 +73,28 @@ sealed interface AppEvent {
     // --- Переписка --------------------------------------------------------
     /** Последние сообщения чата — заменяют показанные. */
     data class HistoryLoaded(val chatId: ByteArray, val messages: List<FfiMessage>, val fresh: Boolean) : AppEvent
+
+    /**
+     * Окно перед самым старым известным — листание назад.
+     *
+     * Дописывается сверху, а не заменяет список. Пустое означает начало
+     * переписки (или что якоря больше нет) — не «повторить».
+     */
+    data class OlderHistoryLoaded(val chatId: ByteArray, val messages: List<FfiMessage>) : AppEvent
+
+    /**
+     * Что рассказал предпросмотр канала: название, порода, цена слова.
+     *
+     * Всё из документа, подписанного владельцем и проверенного ключом
+     * из ссылки. Обещанию самой ссылки верить нельзя (§10.2).
+     */
+    data class ChannelPreviewed(
+        val chatId: ByteArray,
+        val title: String,
+        val open: Boolean,
+        val version: ULong,
+        val powBits: UInt,
+    ) : AppEvent
     /** Новое сообщение. [message] — если оно уже есть на руках (компаньон присылает его сразу). */
     data class MessageArrived(val chatId: ByteArray, val msgId: ByteArray, val message: FfiMessage? = null) : AppEvent
     /**

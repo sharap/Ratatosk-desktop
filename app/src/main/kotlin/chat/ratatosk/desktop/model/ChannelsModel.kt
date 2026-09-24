@@ -52,6 +52,24 @@ class ChannelNotices(
      * проверена, иначе сообщение не показалось бы).
      */
     val messageNotInTheChannel: String,
+    /** До предпросмотра: владелец узнает, что кем-то интересуются (§15). */
+    val preview: String,
+    /** Когда ожидание ушло на медленный путь (§10.5). */
+    val slowPath: String,
+)
+
+/**
+ * Что рассказал предпросмотр канала.
+ *
+ * Всё из документа, подписанного владельцем и проверенного ключом
+ * из ссылки: обещанию самой ссылки верить нельзя (§10.2), а этому можно.
+ */
+class ChannelPreview(
+    val chatId: ByteArray,
+    val title: String,
+    val open: Boolean,
+    val version: ULong,
+    val powBits: UInt,
 )
 
 /** Почему в канале закрыто поле ввода. */
@@ -97,6 +115,27 @@ interface ChannelsApi {
      * с поведением на первой же правке.
      */
     fun channelSignalText(signal: org.ratatosk.core.FfiChannelSignal): String
+
+    /** Что показывать, пока канал не открылся (§10.5) — словами ядра. */
+    fun channelWaitingText(waiting: org.ratatosk.core.FfiWaiting): String
+
+    /** Предлагать ли кнопку «сообщить, когда откроется». */
+    fun channelWaitingOffersNotification(waiting: org.ratatosk.core.FfiWaiting): Boolean
+
+    /**
+     * Предпросмотр канала по ссылке (§10.3, шаг 5).
+     *
+     * Перед вызовом обязателен текст §15: владелец узнает, что кем-то
+     * интересуются, даже если человек потом откажется. Ответа может
+     * и не быть — это не отказ (§10.5).
+     */
+    fun previewChannel(uri: String)
+
+    /** Что рассказал предпросмотр; `null` — не спрашивали или ответа нет. */
+    val channelPreview: StateFlow<ChannelPreview?>
+
+    /** Забыть предпросмотр: окно закрыли. */
+    fun clearChannelPreview()
 
     /** Заявки на впуск, по каналам в hex; §10.4 обещает, что они ждут. */
     val channelRequests: StateFlow<Map<String, List<ChannelRequest>>>
@@ -178,10 +217,30 @@ class ChannelsModel(session: SessionContext) : FeatureModel(session), ChannelsAp
         seeding = seedingNotice(),
         sharingLevel = sharingLevelNotice(),
         messageNotInTheChannel = org.ratatosk.core.messageNotInTheChannelText(),
+        preview = org.ratatosk.core.channelPreviewNotice(),
+        slowPath = org.ratatosk.core.channelSlowPathNotice(),
     )
 
     override fun channelSignalText(signal: org.ratatosk.core.FfiChannelSignal): String =
         org.ratatosk.core.channelSignalText(signal)
+
+    override fun channelWaitingText(waiting: org.ratatosk.core.FfiWaiting): String =
+        org.ratatosk.core.channelWaitingText(waiting)
+
+    override fun channelWaitingOffersNotification(waiting: org.ratatosk.core.FfiWaiting): Boolean =
+        org.ratatosk.core.channelWaitingOffersANotification(waiting)
+
+    private val _channelPreview = MutableStateFlow<ChannelPreview?>(null)
+    override val channelPreview = _channelPreview.asStateFlow()
+
+    override fun previewChannel(uri: String) {
+        _channelPreview.value = null
+        session.io("Failed to preview a channel") { it.previewChannel(uri) }
+    }
+
+    override fun clearChannelPreview() {
+        _channelPreview.value = null
+    }
 
     private val _channelRequests = MutableStateFlow<Map<String, List<ChannelRequest>>>(emptyMap())
     override val channelRequests = _channelRequests.asStateFlow()
@@ -220,6 +279,16 @@ class ChannelsModel(session: SessionContext) : FeatureModel(session), ChannelsAp
                 val hex = event.chatId.toHexString()
                 _historyPulling.update { it - hex }
                 _historyEnded.update { it + (hex to true) }
+            }
+            is AppEvent.ChannelPreviewed -> {
+                // Ответ на предпросмотр: породу больше не надо угадывать.
+                _channelPreview.value = ChannelPreview(
+                    chatId = event.chatId,
+                    title = event.title,
+                    open = event.open,
+                    version = event.version,
+                    powBits = event.powBits,
+                )
             }
             is AppEvent.ChannelRequested -> loadChannel(event.chatId)
             is AppEvent.ChannelPeopleChanged -> loadChannel(event.chatId)
@@ -355,5 +424,6 @@ class ChannelsModel(session: SessionContext) : FeatureModel(session), ChannelsAp
         _sharingLevel.value = emptyMap()
         _historyPulling.value = emptyMap()
         _historyEnded.value = emptyMap()
+        _channelPreview.value = null
     }
 }

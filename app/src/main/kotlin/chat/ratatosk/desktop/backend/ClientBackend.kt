@@ -79,6 +79,9 @@ class ClientBackend(val client: RatatoskClient) : Backend {
             is FfiEvent.SeedingChanged -> emit(AppEvent.SeedingChanged(event.chatId))
             is FfiEvent.SeedAnnounced -> emit(AppEvent.SeedingChanged(event.chatId))
             is FfiEvent.ChannelHistoryEnd -> emit(AppEvent.ChannelHistoryEnd(event.chatId))
+            is FfiEvent.ChannelPreviewed -> emit(
+                AppEvent.ChannelPreviewed(event.chatId, event.title, event.open, event.version, event.powBits)
+            )
             is FfiEvent.GroupMembershipChanged -> {
                 emit(AppEvent.ChatsChanged)
                 emit(AppEvent.GroupChanged(event.chatId))
@@ -156,6 +159,7 @@ class ClientBackend(val client: RatatoskClient) : Backend {
                 awaitingBlocks = ch.awaitingBlocks,
                 rotationOverdue = ch.rotationOverdue,
                 signal = ch.signal,
+                waiting = ch.waiting,
             )
         },
     )
@@ -237,6 +241,12 @@ class ClientBackend(val client: RatatoskClient) : Backend {
     override fun requestHistory(chatId: ByteArray, limit: UInt) {
         emit(AppEvent.HistoryLoaded(chatId, client.messages(chatId, maxOf(limit, 1u)), fresh = true))
     }
+
+    override fun requestOlderHistory(chatId: ByteArray, before: ByteArray, limit: UInt) {
+        emit(AppEvent.OlderHistoryLoaded(chatId, client.messagesBefore(chatId, before, limit)))
+    }
+
+    override fun previewChannel(uri: String) = client.previewChannel(uri)
 
     override fun chatOpened(chatId: ByteArray) {}
 
