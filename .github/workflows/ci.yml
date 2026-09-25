@@ -15,12 +15,12 @@ jobs:
     name: тесты и пакет
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       # Ядро — соседним каталогом, как в README. Здесь «рядом» значит
       # внутри рабочего каталога, поэтому путь называем свойством.
       - name: ядро
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           repository: sharap/ratatosk-core
           path: ratatosk-core
@@ -29,7 +29,7 @@ jobs:
       # (gradle/gradle-daemon-jvm.properties), 17 — компиляция и jpackage.
       # Без первой Gradle скачивал бы её сам на каждом прогоне.
       - name: JDK
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: |
@@ -47,10 +47,19 @@ jobs:
         with:
           workspaces: ratatosk-core
 
-      # jpackage делает .deb через dpkg-deb и fakeroot; второго в образе
-      # может не быть, и тогда задача падает в конце, а не в начале.
-      - name: зависимости упаковщика
-        run: sudo apt-get update && sudo apt-get install -y fakeroot
+      # Две разные нужды в одной установке.
+      #
+      # `libdbus-1-dev` — ядру: на Linux tools/build-desktop.sh сам
+      # добавляет признак `bt` (эфир поверх BlueZ), а `bluer` тянет
+      # libdbus-sys, которому нужны заголовки. Без них cargo падает
+      # на тысячной строке лога, когда всё остальное уже собралось.
+      #
+      # `fakeroot` — jpackage: им он делает .deb, и без него задача
+      # падает в конце, а не в начале.
+      - name: системные зависимости
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libdbus-1-dev pkg-config fakeroot
 
       # Ядро собирается из исходников той же задачей, что и локально:
       # библиотека и привязки к ней — часть сборки, а не артефакт в репозитории.
