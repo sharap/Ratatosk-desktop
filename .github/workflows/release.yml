@@ -69,6 +69,19 @@ jobs:
           ./gradlew :app:packageDeb :app:packageUberJarForCurrentOS
           -Pratatosk.core.dir=ratatosk-core
 
+      # Пакет раздаётся людям, и его зависимости — не догадка, а факт,
+      # который должен быть виден снаружи. Заодно проверка: без пары
+      # через `|` пакет собран без tools/portable-deb.sh и поставится
+      # только на ту систему, где собран.
+      - name: зависимости пакета
+        run: |
+          deps=$(dpkg-deb -f app/build/compose/binaries/main/deb/*.deb Depends)
+          echo "::notice title=Зависимости пакета::$deps"
+          case "$deps" in
+            *"|"*) ;;
+            *) echo "::error::В пакете нет переносимых имён — правка зависимостей не сработала"; exit 1 ;;
+          esac
+
       - name: черновик выпуска
         uses: softprops/action-gh-release@v2
         with:

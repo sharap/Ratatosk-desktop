@@ -100,6 +100,7 @@ PY
     trap - EXIT
     patched=$((patched + 1))
     echo "зависимости переносимы: $deb"
+    echo "зависимости: $(dpkg-deb -f "$deb" Depends)"
 done
 
 if [[ "$patched" -eq 0 ]]; then
