@@ -231,6 +231,26 @@ tasks.withType<org.jetbrains.compose.desktop.application.tasks.AbstractJPackageT
     }
 }
 
+// --- Переносимость .deb между Debian и Ubuntu -----------------------------
+//
+// Зависимости пакету выписывает jpackage — по библиотекам **машины
+// сборки**. В Ubuntu 24.04 половина из них переименована переходом на
+// 64-битный time_t (`libasound2` → `libasound2t64`), в Debian 12 имена
+// прежние, и пакет, собранный на одной системе, на другой не ставится
+// вовсе. Скрипт дописывает в control список через `|`: существует из
+// пары одно, и его достаточно.
+val portableDeb = tasks.register<Exec>("portableDeb") {
+    description = "Делает зависимости .deb переносимыми между Debian и Ubuntu."
+    group = "ratatosk"
+    val binaries = layout.buildDirectory.dir("compose/binaries")
+    commandLine("bash", rootDir.resolve("tools/portable-deb.sh").absolutePath, binaries.get().asFile.absolutePath)
+    onlyIf { binaries.get().asFile.isDirectory }
+}
+
+tasks.matching { it.name == "packageDeb" || it.name == "packageReleaseDeb" }.configureEach {
+    finalizedBy(portableDeb)
+}
+
 tasks.withType<Test>().configureEach {
     providers.gradleProperty("ratatosk.test.keyring").orNull?.let { systemProperty("ratatosk.test.keyring", it) }
 

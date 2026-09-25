@@ -50,11 +50,12 @@ jobs:
       # на тысячной строке лога, когда всё остальное уже собралось.
       #
       # `fakeroot` — jpackage: им он делает .deb, и без него задача
-      # падает в конце, а не в начале.
+      # падает в конце, а не в начале. `binutils` и `zstd` — правке
+      # зависимостей пакета: она переписывает control внутри архива.
       - name: системные зависимости
         run: |
           sudo apt-get update
-          sudo apt-get install -y libdbus-1-dev pkg-config fakeroot
+          sudo apt-get install -y libdbus-1-dev pkg-config fakeroot binutils zstd
 
       # Тесты и здесь: метку ставят на то, что уже прошло проверки, но
       # метку ставит человек, а человек ошибается.
