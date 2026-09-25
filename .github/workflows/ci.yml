@@ -63,11 +63,47 @@ jobs:
 
       # Ядро собирается из исходников той же задачей, что и локально:
       # библиотека и привязки к ней — часть сборки, а не артефакт в репозитории.
+      #
+      # Вывод сохраняется: лог прогона GitHub отдаёт только тем, у кого
+      # есть права на репозиторий, а причину падения надо знать и снаружи.
       - name: тесты
-        run: ./gradlew :app:test -Pratatosk.core.dir=ratatosk-core
+        run: |
+          set -o pipefail
+          ./gradlew :app:test -Pratatosk.core.dir=ratatosk-core 2>&1 | tee -a gradle.log
 
       - name: пакет
-        run: ./gradlew :app:packageDeb -Pratatosk.core.dir=ratatosk-core
+        run: |
+          set -o pipefail
+          ./gradlew :app:packageDeb -Pratatosk.core.dir=ratatosk-core 2>&1 | tee -a gradle.log
+
+      # Что упало — в аннотации: они видны на странице проверок любому,
+      # а «exit code 1» не объясняет ничего. Сперва имена упавших
+      # проверок, а если отчёта нет вовсе — хвост сборки: значит
+      # сломалась она, а не проверка.
+      - name: что упало
+        if: failure()
+        run: |
+          python3 - <<'PY'
+          import glob, os, xml.etree.ElementTree as ET
+
+          def annotate(title, text):
+              text = text.replace('%', '%25').replace('\r', ' ').replace('\n', '%0A')
+              print(f"::error title={title}::{text[:1500]}")
+
+          bad = []
+          for f in glob.glob('app/build/test-results/test/*.xml'):
+              for case in ET.parse(f).getroot().iter('testcase'):
+                  for fail in list(case.iter('failure')) + list(case.iter('error')):
+                      name = f"{case.get('classname','?').split('.')[-1]}.{case.get('name','?')}"
+                      bad.append((name, (fail.get('message') or fail.text or '').strip()))
+
+          for name, message in bad[:10]:
+              annotate(name, message)
+
+          if not bad and os.path.exists('gradle.log'):
+              with open('gradle.log', errors='replace') as log:
+                  annotate('Последние строки сборки', ''.join(log.readlines()[-40:]))
+          PY
 
       # Собранное можно потрогать руками, не собирая у себя. Две недели —
       # чтобы не копить: раздаём мы не отсюда, а из выпусков.
