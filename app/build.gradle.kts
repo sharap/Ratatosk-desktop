@@ -202,6 +202,21 @@ compose.desktop {
     }
 }
 
+// --- Зависимость .deb от ffmpeg -------------------------------------------
+//
+// Голосовые и кружки играются и пишутся им: своего декодера Opus на JVM
+// нет, а тащить нативные библиотеки ради этого — сотня мегабайт. Без
+// ffmpeg приложение работает, но запись и просмотр молча не работали бы,
+// и человек винил бы приложение, а не отсутствующий пакет.
+//
+// Плагин Compose своей строчки для `Depends` не даёт, зато пробрасывает
+// в jpackage свободные доводы — ими и говорим.
+tasks.withType<org.jetbrains.compose.desktop.application.tasks.AbstractJPackageTask>().configureEach {
+    if (name.contains("Deb", ignoreCase = true)) {
+        freeArgs.addAll("--linux-package-deps", "ffmpeg")
+    }
+}
+
 tasks.withType<Test>().configureEach {
     providers.gradleProperty("ratatosk.test.keyring").orNull?.let { systemProperty("ratatosk.test.keyring", it) }
 }

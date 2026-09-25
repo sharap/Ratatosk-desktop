@@ -1,0 +1,70 @@
+# Лестница проверок из README, слово в слово: `:app:test`, а рядом —
+# сборка пакета. Пакет стоит в том же прогоне не для красоты: тесты
+# не трогают ни jpackage, ни ресурсы, и «собирается» ломается отдельно
+# от «работает».
+name: проверки
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test:
+    name: тесты и пакет
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Ядро — соседним каталогом, как в README. Здесь «рядом» значит
+      # внутри рабочего каталога, поэтому путь называем свойством.
+      - name: ядро
+        uses: actions/checkout@v4
+        with:
+          repository: sharap/ratatosk-core
+          path: ratatosk-core
+
+      # Две версии нарочно: 25 просит демон Gradle
+      # (gradle/gradle-daemon-jvm.properties), 17 — компиляция и jpackage.
+      # Без первой Gradle скачивал бы её сам на каждом прогоне.
+      - name: JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: |
+            25
+            17
+          cache: gradle
+
+      # Версия и компоненты объявлены в rust-toolchain.toml ядра;
+      # `rustup show` их и ставит.
+      - name: тулчейн Rust
+        working-directory: ratatosk-core
+        run: rustup show
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: ratatosk-core
+
+      # jpackage делает .deb через dpkg-deb и fakeroot; второго в образе
+      # может не быть, и тогда задача падает в конце, а не в начале.
+      - name: зависимости упаковщика
+        run: sudo apt-get update && sudo apt-get install -y fakeroot
+
+      # Ядро собирается из исходников той же задачей, что и локально:
+      # библиотека и привязки к ней — часть сборки, а не артефакт в репозитории.
+      - name: тесты
+        run: ./gradlew :app:test -Pratatosk.core.dir=ratatosk-core
+
+      - name: пакет
+        run: ./gradlew :app:packageDeb -Pratatosk.core.dir=ratatosk-core
+
+      # Собранное можно потрогать руками, не собирая у себя. Две недели —
+      # чтобы не копить: раздаём мы не отсюда, а из выпусков.
+      - name: сохранить пакет
+        uses: actions/upload-artifact@v4
+        with:
+          name: ratatosk-deb
+          path: app/build/compose/binaries/main/deb/*.deb
+          retention-days: 14

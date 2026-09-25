@@ -1,0 +1,74 @@
+# Выпуск по метке: собирает пакет и jar и складывает их в черновик
+# выпуска. Черновик, а не готовый выпуск, — нарочно: снаружи приложение
+# никто не проверял, и решение «это можно ставить людям» остаётся
+# за человеком.
+name: выпуск
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: .deb и jar
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: ядро
+        uses: actions/checkout@v4
+        with:
+          repository: sharap/ratatosk-core
+          path: ratatosk-core
+
+      - name: JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: |
+            25
+            17
+          cache: gradle
+
+      - name: тулчейн Rust
+        working-directory: ratatosk-core
+        run: rustup show
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: ratatosk-core
+
+      - name: зависимости упаковщика
+        run: sudo apt-get update && sudo apt-get install -y fakeroot
+
+      # Тесты и здесь: метку ставят на то, что уже прошло проверки, но
+      # метку ставит человек, а человек ошибается.
+      - name: тесты
+        run: ./gradlew :app:test -Pratatosk.core.dir=ratatosk-core
+
+      # Пакет — для Debian и Ubuntu, jar — для всех остальных: он
+      # запускается системной JVM 17 и старше.
+      - name: сборка
+        run: >
+          ./gradlew :app:packageDeb :app:packageUberJarForCurrentOS
+          -Pratatosk.core.dir=ratatosk-core
+
+      - name: черновик выпуска
+        uses: softprops/action-gh-release@v2
+        with:
+          draft: true
+          prerelease: true
+          files: |
+            app/build/compose/binaries/main/deb/*.deb
+            app/build/compose/jars/*.jar
+          body: |
+            Предварительная сборка. Снаружи приложение никто не проверял.
+
+            * `.deb` — Debian и Ubuntu, x86_64. Зависит от `ffmpeg`:
+              им играются голосовые и кружки, и apt поставит его сам.
+            * `.jar` — всё остальное: нужна системная JVM 17 или новее,
+              а для голосовых и кружков — `ffmpeg` в системе.
