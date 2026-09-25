@@ -1,25 +1,35 @@
 *.iml
 .gradle
-.kotlin
 /local.properties
 local.properties
-/.idea/caches
-/.idea/libraries
-/.idea/modules.xml
-/.idea/workspace.xml
-/.idea/navEditor.xml
-/.idea/assetWizardSettings.xml
 .DS_Store
 /build
 /captures
-.externalNativeBuild
-.cxx
 
 # Артефакты сборки и логи
 /dist
 *.log
 
-# Нативная библиотека ядра — собирается из ratatosk-core, в репозиторий не кладём
+# Нативная библиотека ядра и биндинги к ней. Их собирает задача
+# `buildRustCore` из ratatosk-core в `build/generated/uniffi` — в
+# репозитории они были бы копией чужого артефакта, и тяжёлой.
 *.so
 *.dll
 *.dylib
+
+# Готовые пакеты: собираются из исходников, места в истории им не место.
+*.deb
+*.msi
+*.dmg
+
+# Рабочие записи: планы, разборы, списки ручных проверок и артефакты
+# вспомогательных инструментов. Постороннему читателю они ничего
+# не объясняют, а устаревают быстрее кода.
+.artifacts/
+PLAN-*.md
+REVIEW-*.md
+CHECKLIST-*.md
+
+# Среда разработки и кэши.
+/.idea/
+.kotlin/
