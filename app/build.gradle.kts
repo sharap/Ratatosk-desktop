@@ -10,6 +10,10 @@ kotlin {
     jvmToolchain(17)
 }
 
+// Версия приложения в одном месте: она попадает и в пакеты, и в имя
+// собранного jar-а, а разъехавшись, эти два числа врут о одном и том же.
+val appVersion = "0.1.0"
+
 // --- Ядро: библиотека и биндинги из одной сборки ---------------------------
 //
 // Собирает `ratatosk-core/tools/build-desktop.sh`: он кладёт библиотеку в
@@ -103,7 +107,7 @@ val includeArm64 = providers.gradleProperty("ratatosk.arm64").map { it.toBoolean
 if (includeArm64) {
     tasks.matching { it.name == "packageUberJarForCurrentOS" }.configureEach {
         // Тип задачи — `org.gradle.jvm.tasks.Jar`, а не `bundling.Jar`.
-        (this as org.gradle.jvm.tasks.Jar).archiveFileName.set("Ratatosk-linux-x64-arm64-1.0.0.jar")
+        (this as org.gradle.jvm.tasks.Jar).archiveFileName.set("Ratatosk-linux-x64-arm64-$appVersion.jar")
     }
 }
 
@@ -167,7 +171,7 @@ compose.desktop {
             // По :app:suggestRuntimeModules; jdk.unsupported нужен JNA и DataStore.
             modules("java.instrument", "jdk.unsupported")
             packageName = "Ratatosk"
-            packageVersion = "1.0.0"
+            packageVersion = appVersion
             description = "Ratatosk — переписка без серверов"
             vendor = "Ratatosk"
 
