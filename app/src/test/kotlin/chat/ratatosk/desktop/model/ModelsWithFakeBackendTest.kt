@@ -269,7 +269,7 @@ class ModelsWithFakeBackendTest {
         // Второе сообщение того же чата — «+1 ещё».
         notifications.onEvent(AppEvent.MessageArrived(chatA, ByteArray(16) { 7 }, message(ByteArray(16) { 7 }).copy(body = "ещё")))
         waitUntil { requests.size == 2 }
-        assertEquals("ещё\n+1 ещё", requests[1].body)
+        assertEquals(Strings.NOTIFY_MORE.format("ещё", 1), requests[1].body)
         assertEquals(requests[0].key, requests[1].key)
 
         // Реакция компаньона на моё сообщение: новая чужая — уведомляем.

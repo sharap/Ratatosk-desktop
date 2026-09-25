@@ -1,6 +1,7 @@
 package chat.ratatosk.desktop.model
 
 import chat.ratatosk.desktop.backend.Group
+import chat.ratatosk.desktop.ui.Strings
 import chat.ratatosk.desktop.util.DateUtils
 import chat.ratatosk.desktop.util.toHexString
 import org.junit.Assert.assertEquals
@@ -88,7 +89,9 @@ class ChatListTest {
         val now = 1_700_000_000_000L
         val today = DateUtils.formatChatTime(now.toULong(), now)
         assertTrue("время дня: $today", today.matches(Regex("\\d{2}:\\d{2}")))
-        assertEquals("вчера", DateUtils.formatChatTime((now - 24L * 3600 * 1000).toULong(), now))
+        // Слово — из Strings: проверяется, что показано «вчера», а не как
+        // это написано; написание меняется переводом, поведение — нет.
+        assertEquals(Strings.DATE_YESTERDAY, DateUtils.formatChatTime((now - 24L * 3600 * 1000).toULong(), now))
         assertEquals("", DateUtils.formatChatTime(0UL, now))
         // Прошлый год — полная дата.
         assertTrue(DateUtils.formatChatTime((now - 400L * 24 * 3600 * 1000).toULong(), now).matches(Regex("\\d{2}\\.\\d{2}\\.\\d{4}")))

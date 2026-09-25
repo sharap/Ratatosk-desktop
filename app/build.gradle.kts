@@ -233,4 +233,15 @@ tasks.withType<org.jetbrains.compose.desktop.application.tasks.AbstractJPackageT
 
 tasks.withType<Test>().configureEach {
     providers.gradleProperty("ratatosk.test.keyring").orNull?.let { systemProperty("ratatosk.test.keyring", it) }
+
+    // Язык проверок закреплён, и это не прихоть. `Strings` выбирает слова
+    // по языку системы, а часть проверяемой логики живёт **только**
+    // в русской ветке — склонения «вложение/вложения/вложений». Пока язык
+    // брался у машины, набор проверок был зелёным здесь и красным в CI,
+    // причём про слова, а не про поведение: худший вид падения — тот,
+    // который зависит от того, кто запускает.
+    //
+    // Через jvmArgs, а не systemProperty: `Locale.getDefault()` читается
+    // при запуске JVM, и свойство, поставленное позже, на него не влияет.
+    jvmArgs("-Duser.language=ru", "-Duser.country=RU")
 }
